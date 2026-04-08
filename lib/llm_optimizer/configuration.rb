@@ -43,6 +43,7 @@ module LlmOptimizer
       @timeout_seconds      = 5
       @cache_ttl            = 86400
       @llm_caller           = nil
+      @embedding_caller     = nil
     end
 
     # Copies only explicitly set keys from other_config without resetting unmentioned keys.

@@ -6,26 +6,44 @@ require "json"
 
 module LlmOptimizer
   class EmbeddingClient
-    ENDPOINT = "https://api.openai.com/v1/embeddings"
+    OPENAI_ENDPOINT = "https://api.openai.com/v1/embeddings"
 
-    def initialize(model:, timeout_seconds:)
-      @model           = model
-      @timeout_seconds = timeout_seconds
+    def initialize(model:, timeout_seconds:, embedding_caller: nil)
+      @model            = model
+      @timeout_seconds  = timeout_seconds
+      @embedding_caller = embedding_caller
     end
 
     def embed(text)
-      uri  = URI(ENDPOINT)
+      if @embedding_caller
+        @embedding_caller.call(text)
+      else
+        embed_via_openai(text)
+      end
+    rescue EmbeddingError
+      raise
+    rescue StandardError => e
+      raise EmbeddingError, "Embedding request failed: #{e.message}"
+    end
+
+    private
+
+    def embed_via_openai(text)
+      api_key = ENV["OPENAI_API_KEY"]
+      raise EmbeddingError, "OPENAI_API_KEY is not set and no embedding_caller configured" if api_key.nil? || api_key.empty?
+
+      uri  = URI(OPENAI_ENDPOINT)
       body = JSON.generate({ model: @model, input: text })
 
-      http          = Net::HTTP.new(uri.host, uri.port)
-      http.use_ssl  = true
+      http              = Net::HTTP.new(uri.host, uri.port)
+      http.use_ssl      = true
       http.open_timeout = @timeout_seconds
       http.read_timeout = @timeout_seconds
 
-      request = Net::HTTP::Post.new(uri.path)
+      request                  = Net::HTTP::Post.new(uri.path)
       request["Content-Type"]  = "application/json"
-      request["Authorization"] = "Bearer #{ENV.fetch("OPENAI_API_KEY")}"
-      request.body = body
+      request["Authorization"] = "Bearer #{api_key}"
+      request.body             = body
 
       response = http.request(request)
 
@@ -36,12 +54,8 @@ module LlmOptimizer
       parsed = JSON.parse(response.body)
       parsed.dig("data", 0, "embedding") or
         raise EmbeddingError, "Unexpected response shape: #{response.body}"
-    rescue EmbeddingError
-      raise
     rescue Net::OpenTimeout, Net::ReadTimeout => e
       raise EmbeddingError, "Embedding request timed out: #{e.message}"
-    rescue StandardError => e
-      raise EmbeddingError, "Embedding request failed: #{e.message}"
     end
   end
 end

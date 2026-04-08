@@ -30,6 +30,25 @@ module LlmOptimizer
     temp = Configuration.new
     yield temp
     configuration.merge!(temp)
+    validate_configuration!(configuration)
+  end
+
+  # Warns about misconfigured options rather than failing silently at call time.
+  def self.validate_configuration!(config)
+    if config.use_semantic_cache && config.embedding_caller.nil?
+      config.logger.warn(
+        "[llm_optimizer] use_semantic_cache is true but no embedding_caller is configured. " \
+        "Semantic caching will be skipped. Set config.embedding_caller to enable it."
+      )
+      config.use_semantic_cache = false
+    end
+
+    if config.llm_caller.nil?
+      config.logger.warn(
+        "[llm_optimizer] No llm_caller configured. " \
+        "LlmOptimizer.optimize will raise ConfigurationError unless llm_caller is set."
+      )
+    end
   end
 
   # Returns the current global Configuration, lazy-initializing if nil.
@@ -101,8 +120,9 @@ module LlmOptimizer
     if call_config.use_semantic_cache
       begin
         emb_client = EmbeddingClient.new(
-          model:           call_config.embedding_model,
-          timeout_seconds: call_config.timeout_seconds
+          model:            call_config.embedding_model,
+          timeout_seconds:  call_config.timeout_seconds,
+          embedding_caller: call_config.embedding_caller
         )
         embedding = emb_client.embed(prompt)
 
