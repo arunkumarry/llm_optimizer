@@ -1,5 +1,33 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
 ## [Unreleased]
 
-## [0.1.0] - 2026-04-07
+## [0.1.0] - 2026-04-10
 
-- Initial release
+### Added
+
+- `LlmOptimizer.optimize(prompt, options = {}, &block)` — primary entry point returning an `OptimizeResult`
+- `LlmOptimizer.configure` — global configuration with merge semantics (multiple calls merge without resetting)
+- `LlmOptimizer.reset_configuration!` — resets global config to defaults (useful in tests)
+- `LlmOptimizer.wrap_client(client_class)` — opt-in idempotent client wrapping via module prepend
+- **Semantic Caching** — Redis-backed vector similarity cache using cosine similarity; configurable threshold and TTL
+- **Intelligent Model Routing** — heuristic classifier routing prompts to `:simple` or `:complex` model tier based on word count, code blocks, and keywords
+- **Token Pruning / Compressor** — English stop-word removal with fenced code block preservation; `estimate_tokens` helper
+- **Conversation History Sliding Window** — summarizes oldest messages when token budget is exceeded; falls back to original messages on LLM failure
+- **EmbeddingClient** — injectable `embedding_caller` lambda with OpenAI fallback via `OPENAI_API_KEY`
+- **`llm_caller`** — injectable lambda to wire any LLM provider (RubyLLM, ruby-openai, Anthropic, Bedrock, etc.)
+- **Rails generator** — `rails generate llm_optimizer:install` creates a pre-filled initializer
+- **Railtie** — auto-loads generator when used in a Rails app
+- **Structured logging** — INFO log per optimize call (no prompt content); DEBUG log with full prompt/response when `debug_logging: true`
+- **Resilience** — all component failures fall through to raw LLM call; `EmbeddingError` treated as cache miss
+- Full exception hierarchy: `LlmOptimizer::Error`, `ConfigurationError`, `EmbeddingError`, `TimeoutError`
+- `OptimizeResult` struct with `response`, `model`, `model_tier`, `cache_status`, `original_tokens`, `compressed_tokens`, `latency_ms`, `messages`
+- Unit test suite covering all components with positive and negative scenarios using Minitest + Mocha
+
+[Unreleased]: https://github.com/arunkumarry/llm_optimizer/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/arunkumarry/llm_optimizer/releases/tag/v0.1.0

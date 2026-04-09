@@ -107,14 +107,24 @@ class TestHistoryManager < Minitest::Test
 
   def test_process_returns_original_on_llm_failure
     msgs = messages(15, chars_each: 100)
-    result = manager(budget: 10, caller: failing_llm_caller).process(msgs)
+    result = suppress_stderr { manager(budget: 10, caller: failing_llm_caller).process(msgs) }
     assert_equal msgs, result
   end
 
   def test_process_does_not_raise_on_llm_failure
     msgs = messages(15, chars_each: 100)
     # Should not raise even when LLM fails
-    result = manager(budget: 10, caller: failing_llm_caller).process(msgs)
+    result = suppress_stderr { manager(budget: 10, caller: failing_llm_caller).process(msgs) }
     assert_equal msgs, result
+  end
+
+  private
+
+  def suppress_stderr
+    old = $stderr
+    $stderr = StringIO.new
+    yield
+  ensure
+    $stderr = old
   end
 end

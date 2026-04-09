@@ -65,8 +65,7 @@ class TestSemanticCache < Minitest::Test
     bad_redis = Object.new
     def bad_redis.set(*); raise Redis::BaseError, "connection refused"; end
     cache = LlmOptimizer::SemanticCache.new(bad_redis, threshold: 0.9, ttl: 3600)
-    # Should not raise — Redis errors are swallowed
-    cache.store(EMBEDDING, RESPONSE)
+    suppress_stderr { cache.store(EMBEDDING, RESPONSE) }
   end
 
   # lookup
@@ -99,7 +98,7 @@ class TestSemanticCache < Minitest::Test
     bad_redis = Object.new
     def bad_redis.keys(*); raise Redis::BaseError, "timeout"; end
     cache = LlmOptimizer::SemanticCache.new(bad_redis, threshold: 0.9, ttl: 3600)
-    assert_nil cache.lookup(EMBEDDING)
+    suppress_stderr { assert_nil cache.lookup(EMBEDDING) }
   end
 
   # cosine_similarity
@@ -144,5 +143,15 @@ class TestSemanticCache < Minitest::Test
     response  = "round trip response"
     @cache.store(embedding, response)
     assert_equal response, @cache.lookup(embedding)
+  end
+
+  private
+
+  def suppress_stderr
+    old = $stderr
+    $stderr = StringIO.new
+    yield
+  ensure
+    $stderr = old
   end
 end
