@@ -43,7 +43,6 @@ Gem::Specification.new do |spec|
   # Development dependencies
   spec.add_development_dependency "mocha", "~> 2.0"
   spec.add_development_dependency "overcommit", "~> 0.65"
-  spec.add_development_dependency "prop_check", "~> 1.0"
 
   # For more information and examples about making a new gem, check out our
   # guide at: https://bundler.io/guides/creating_gem.html
