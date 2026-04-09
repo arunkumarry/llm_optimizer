@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-04-10
+
+### Fixed
+- RuboCop offenses across all source and test files
+- `missing keyword: :_model` error in test lambdas — use `**_kwargs` pattern
+- HistoryManager summarization tests failing due to keyword argument mismatch
+- Suppress third-party gem warnings in test output
+
+### Added
+- Full unit test suite with positive and negative scenarios (Minitest + Mocha)
+- Mock JSON fixtures for OpenAI embedding API responses
+- `CONTRIBUTING.md` with fork setup, issue guidelines, PR checklist, and overcommit instructions
+- Pre-commit hooks via overcommit (RuboCop + Minitest)
+- Rails generator: `rails generate llm_optimizer:install`
+- `embedding_caller` and `llm_caller` injectable lambdas — no forced provider dependency
+- `logger` gem explicit dependency for Ruby 3.5+ compatibility
+
 ## [0.1.0] - 2026-04-10
 
 ### Added
