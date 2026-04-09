@@ -6,23 +6,23 @@ class TestHistoryManager < Minitest::Test
   SUMMARY = "Summary of conversation"
 
   def stub_llm_caller(response = SUMMARY)
-    ->(prompt, model:) { response }
+    ->(_prompt, **_kwargs) { response }
   end
 
   def failing_llm_caller
-    ->(prompt, model:) { raise "LLM unavailable" }
+    ->(_prompt, **_kwargs) { raise "LLM unavailable" }
   end
 
   def manager(budget: 100, caller: stub_llm_caller)
     LlmOptimizer::HistoryManager.new(
-      llm_caller:   caller,
+      llm_caller: caller,
       simple_model: "gpt-4o-mini",
       token_budget: budget
     )
   end
 
   def messages(count, chars_each: 10)
-    count.times.map { |i| { role: "user", content: "x" * chars_each } }
+    count.times.map { |_i| { role: "user", content: "x" * chars_each } }
   end
 
   # estimate_tokens
@@ -45,7 +45,7 @@ class TestHistoryManager < Minitest::Test
   end
 
   def test_estimate_tokens_uses_integer_division
-    msgs = [{ role: "user", content: "abcde" }]  # 5 chars / 4 = 1
+    msgs = [{ role: "user", content: "abcde" }] # 5 chars / 4 = 1
     assert_equal 1, manager.estimate_tokens(msgs)
   end
 
@@ -71,7 +71,7 @@ class TestHistoryManager < Minitest::Test
   # process: over budget
 
   def test_process_summarizes_when_over_budget
-    msgs = messages(15, chars_each: 100)  # 15 * 100 / 4 = 375 > 10 budget
+    msgs = messages(15, chars_each: 100) # 15 * 100 / 4 = 375 > 10 budget
     result = manager(budget: 10).process(msgs)
     assert_equal "system", result.first[:role]
     assert_equal SUMMARY, result.first[:content]
@@ -92,7 +92,7 @@ class TestHistoryManager < Minitest::Test
   end
 
   def test_process_preserves_messages_after_summarized_block
-    msgs = 15.times.map { |i| { role: "user", content: "x" * 100 } }
+    msgs = 15.times.map { |_i| { role: "user", content: "x" * 100 } }
     result = manager(budget: 10).process(msgs)
     assert_equal msgs.last(5), result.last(5)
   end

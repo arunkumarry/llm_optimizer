@@ -18,7 +18,7 @@ module LlmOptimizer
     def process(messages)
       return messages if estimate_tokens(messages) <= @token_budget
 
-      count      = [SUMMARIZE_COUNT, messages.length].min
+      count = [SUMMARIZE_COUNT, messages.length].min
       to_summarize = messages.first(count)
       remainder    = messages.drop(count)
 
@@ -32,7 +32,8 @@ module LlmOptimizer
 
     def summarize(messages)
       conversation = messages.map { |m| "#{m[:role] || m["role"]}: #{m[:content] || m["content"]}" }.join("\n")
-      prompt = "Summarize the following conversation history concisely, preserving key facts and decisions:\n\n#{conversation}"
+      prompt = "Summarize the following conversation history concisely, " \
+               "preserving key facts and decisions:\n\n#{conversation}"
 
       @llm_caller.call(prompt, model: @simple_model)
     rescue StandardError => e

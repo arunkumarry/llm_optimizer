@@ -5,7 +5,7 @@ require "mocha/minitest"
 require "json"
 
 class TestEmbeddingClient < Minitest::Test
-  FIXTURE_DIR = File.expand_path("../../fixtures", __FILE__)
+  FIXTURE_DIR = File.expand_path("../fixtures", __dir__)
 
   def openai_success_body
     File.read(File.join(FIXTURE_DIR, "openai_embedding_response.json"))
@@ -36,7 +36,10 @@ class TestEmbeddingClient < Minitest::Test
     client = LlmOptimizer::EmbeddingClient.new(
       model: "text-embedding-3-small",
       timeout_seconds: 5,
-      embedding_caller: ->(text) { received = text; [0.1] }
+      embedding_caller: lambda { |text|
+        received = text
+        [0.1]
+      }
     )
     client.embed("test input")
     assert_equal "test input", received
@@ -149,7 +152,7 @@ class TestEmbeddingClient < Minitest::Test
   private
 
   def with_env(vars)
-    old = vars.keys.map { |k| [k, ENV[k.to_s]] }.to_h
+    old = vars.keys.to_h { |k| [k, ENV.fetch(k.to_s, nil)] }
     vars.each { |k, v| v.nil? ? ENV.delete(k.to_s) : ENV[k.to_s] = v }
     yield
   ensure

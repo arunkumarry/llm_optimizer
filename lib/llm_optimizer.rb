@@ -37,13 +37,13 @@ module LlmOptimizer
 
   # Warns about misconfigured options rather than failing silently at call time.
   def self.validate_configuration!(config)
-    if config.use_semantic_cache && config.embedding_caller.nil?
-      config.logger.warn(
-        "[llm_optimizer] use_semantic_cache is true but no embedding_caller is configured. " \
-        "Semantic caching will be skipped. Set config.embedding_caller to enable it."
-      )
-      config.use_semantic_cache = false
-    end
+    return unless config.use_semantic_cache && config.embedding_caller.nil?
+
+    config.logger.warn(
+      "[llm_optimizer] use_semantic_cache is true but no embedding_caller is configured. " \
+      "Semantic caching will be skipped. Set config.embedding_caller to enable it."
+    )
+    config.use_semantic_cache = false
   end
 
   # Returns the current global Configuration, lazy-initializing if nil.
@@ -59,11 +59,11 @@ module LlmOptimizer
 
   # Opt-in client wrapping
   module WrapperModule
-    def chat(params, &block)
+    def chat(params, &)
       prompt = params[:messages] || params[:prompt]
       optimized = LlmOptimizer.optimize(prompt)
       params = params.merge(messages: optimized.messages, model: optimized.model)
-      super(params, &block)
+      super
     end
   end
 
@@ -80,7 +80,7 @@ module LlmOptimizer
   # options hash keys mirror Configuration attr_accessors and are merged over
   # the global config for this call only.  An optional block is yielded a
   # per-call Configuration for fine-grained control.
-  def self.optimize(prompt, options = {}, &block)
+  def self.optimize(prompt, options = {})
     start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
     # Resolve per-call configuration — only pass known config keys
@@ -88,6 +88,7 @@ module LlmOptimizer
     call_config.merge!(configuration)
     options.each do |k, v|
       next unless LlmOptimizer::Configuration::KNOWN_KEYS.include?(k.to_sym)
+
       call_config.public_send(:"#{k}=", v)
     end
     yield call_config if block_given?
@@ -118,8 +119,8 @@ module LlmOptimizer
     if call_config.use_semantic_cache
       begin
         emb_client = EmbeddingClient.new(
-          model:            call_config.embedding_model,
-          timeout_seconds:  call_config.timeout_seconds,
+          model: call_config.embedding_model,
+          timeout_seconds: call_config.timeout_seconds,
           embedding_caller: call_config.embedding_caller
         )
         embedding = emb_client.embed(prompt)
@@ -136,14 +137,14 @@ module LlmOptimizer
                      original_tokens: original_tokens, compressed_tokens: compressed_tokens,
                      latency_ms: latency_ms, prompt: original_prompt, response: cached)
             return OptimizeResult.new(
-              response:          cached,
-              model:             model,
-              model_tier:        model_tier,
-              cache_status:      :hit,
-              original_tokens:   original_tokens,
+              response: cached,
+              model: model,
+              model_tier: model_tier,
+              cache_status: :hit,
+              original_tokens: original_tokens,
               compressed_tokens: compressed_tokens,
-              latency_ms:        latency_ms,
-              messages:          options[:messages]
+              latency_ms: latency_ms,
+              messages: options[:messages]
             )
           end
         end
@@ -159,7 +160,7 @@ module LlmOptimizer
     if call_config.manage_history && messages
       llm_caller = ->(p, model:) { raw_llm_call(p, model: model) }
       history_mgr = HistoryManager.new(
-        llm_caller:   llm_caller,
+        llm_caller: llm_caller,
         simple_model: call_config.simple_model,
         token_budget: call_config.token_budget
       )
@@ -188,16 +189,15 @@ module LlmOptimizer
              latency_ms: latency_ms, prompt: original_prompt, response: response)
 
     OptimizeResult.new(
-      response:          response,
-      model:             model,
-      model_tier:        model_tier,
-      cache_status:      :miss,
-      original_tokens:   original_tokens,
+      response: response,
+      model: model,
+      model_tier: model_tier,
+      cache_status: :miss,
+      original_tokens: original_tokens,
       compressed_tokens: compressed_tokens,
-      latency_ms:        latency_ms,
-      messages:          messages
+      latency_ms: latency_ms,
+      messages: messages
     )
-
   rescue EmbeddingError => e
     # Treat embedding failures as cache miss — continue to raw LLM call
     logger = configuration.logger
@@ -205,30 +205,29 @@ module LlmOptimizer
     latency_ms = elapsed_ms(start)
     response   = raw_llm_call(original_prompt, model: nil, config: configuration)
     OptimizeResult.new(
-      response:          response,
-      model:             nil,
-      model_tier:        nil,
-      cache_status:      :miss,
-      original_tokens:   original_tokens || 0,
+      response: response,
+      model: nil,
+      model_tier: nil,
+      cache_status: :miss,
+      original_tokens: original_tokens || 0,
       compressed_tokens: nil,
-      latency_ms:        latency_ms,
-      messages:          options[:messages]
+      latency_ms: latency_ms,
+      messages: options[:messages]
     )
-
   rescue LlmOptimizer::Error, StandardError => e
     logger = configuration.logger
     logger.error("[llm_optimizer] #{e.class}: #{e.message}\n#{e.backtrace&.first(5)&.join("\n")}")
     latency_ms = elapsed_ms(start)
     response   = raw_llm_call(original_prompt, model: nil, config: configuration)
     OptimizeResult.new(
-      response:          response,
-      model:             nil,
-      model_tier:        nil,
-      cache_status:      :miss,
-      original_tokens:   original_tokens || 0,
+      response: response,
+      model: nil,
+      model_tier: nil,
+      cache_status: :miss,
+      original_tokens: original_tokens || 0,
       compressed_tokens: nil,
-      latency_ms:        latency_ms,
-      messages:          options[:messages]
+      latency_ms: latency_ms,
+      messages: options[:messages]
     )
   end
 
@@ -239,8 +238,11 @@ module LlmOptimizer
 
     def raw_llm_call(prompt, model:, config: nil)
       caller = config&.llm_caller || @_current_llm_caller
-      raise ConfigurationError,
-            "No llm_caller configured. Set it via LlmOptimizer.configure { |c| c.llm_caller = ->(prompt, model:) { ... } }" unless caller
+      unless caller
+        raise ConfigurationError,
+              "No llm_caller configured. " \
+              "Set it via LlmOptimizer.configure { |c| c.llm_caller = ->(prompt, model:) { ... } }"
+      end
 
       caller.call(prompt, model: model)
     end
@@ -251,7 +253,6 @@ module LlmOptimizer
 
     def emit_log(logger, config, cache_status:, model_tier:, original_tokens:,
                  compressed_tokens:, latency_ms:, prompt:, response:)
-
       logger.info(
         "[llm_optimizer] { cache_status: #{cache_status.inspect}, " \
         "model_tier: #{model_tier.inspect}, " \
@@ -260,9 +261,9 @@ module LlmOptimizer
         "latency_ms: #{latency_ms.inspect} }"
       )
 
-      if config.debug_logging
-        logger.debug("[llm_optimizer] prompt=#{prompt.inspect} response=#{response.inspect}")
-      end
+      return unless config.debug_logging
+
+      logger.debug("[llm_optimizer] prompt=#{prompt.inspect} response=#{response.inspect}")
     end
 
     def build_redis(redis_url)

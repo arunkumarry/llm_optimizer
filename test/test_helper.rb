@@ -9,6 +9,7 @@ module SuppressGemWarnings
 
   def warn(msg, *args, **kwargs)
     return if msg.to_s.match?(GEM_RE)
+
     super
   end
 end

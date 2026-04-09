@@ -6,19 +6,21 @@ require "msgpack"
 require "mocha/minitest"
 
 # Stub Redis::BaseError for unit tests (no real Redis gem needed)
-module Redis
-  class BaseError < StandardError; end
-end unless defined?(Redis::BaseError)
+unless defined?(Redis::BaseError)
+  module Redis
+    class BaseError < StandardError; end
+  end
+end
 
 class TestGateway < Minitest::Test
   LLM_RESPONSE = "This is the LLM response"
-  EMBEDDING    = [1.0, 0.0, 0.0]
+  EMBEDDING    = [1.0, 0.0, 0.0].freeze
 
   def setup
     LlmOptimizer.reset_configuration!
     LlmOptimizer.configure do |c|
-      c.llm_caller      = ->(prompt, model:) { LLM_RESPONSE }
-      c.logger          = Logger.new(nil)  # silence logs in tests
+      c.llm_caller      = ->(_prompt, **_kwargs) { LLM_RESPONSE }
+      c.logger          = Logger.new(nil) # silence logs in tests
     end
   end
 
@@ -56,7 +58,7 @@ class TestGateway < Minitest::Test
   def test_result_has_original_tokens
     result = LlmOptimizer.optimize("What is Redis?")
     assert_kind_of Integer, result.original_tokens
-    assert result.original_tokens > 0
+    assert result.original_tokens.positive?
   end
 
   def test_result_has_latency_ms
@@ -141,7 +143,10 @@ class TestGateway < Minitest::Test
       c.use_semantic_cache = true
       c.redis_url          = "redis://localhost:6379"
       c.embedding_caller   = ->(_text) { EMBEDDING }
-      c.llm_caller         = ->(prompt, model:) { called = true; LLM_RESPONSE }
+      c.llm_caller         = lambda { |_prompt, **_kwargs|
+        called = true
+        LLM_RESPONSE
+      }
     end
 
     empty_redis = build_mock_redis_empty
@@ -229,7 +234,7 @@ class TestGateway < Minitest::Test
   def build_mock_redis_with_hit(response)
     embedding = EMBEDDING
     payload   = MessagePack.pack({ "embedding" => embedding, "response" => response })
-    key       = "llm_optimizer:cache:" + Digest::SHA256.hexdigest(embedding.pack("f*"))
+    key       = "llm_optimizer:cache:#{Digest::SHA256.hexdigest(embedding.pack("f*"))}"
 
     mock = Object.new
     mock.define_singleton_method(:keys) { |_pattern| [key] }

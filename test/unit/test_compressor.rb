@@ -25,7 +25,7 @@ class TestCompressor < Minitest::Test
   def test_preserves_word_order
     result = @compressor.compress("the quick brown fox jumps")
     words = result.split
-    assert_equal words, words.sort_by { |w| result.index(w) }
+    assert_equal(words, words.sort_by { |w| result.index(w) })
     assert_equal "quick brown fox jumps", result
   end
 

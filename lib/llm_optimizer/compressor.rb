@@ -40,7 +40,7 @@ module LlmOptimizer
 
     def remove_stop_words(text)
       stop_set = STOP_WORDS.to_set
-      words = text.split(" ")
+      words = text.split
       words.reject { |w| stop_set.include?(w.downcase) }.join(" ")
     end
   end

@@ -24,8 +24,8 @@ LlmOptimizer.configure do |config|
   # --- Tuning ---
   config.similarity_threshold = 0.96   # cosine similarity cutoff for a cache hit
   config.token_budget         = 4000   # token limit before history summarization kicks in
-  config.cache_ttl            = 86400  # cache entry TTL in seconds (default: 24h)
-  config.timeout_seconds      = 5      # timeout for embedding / external API calls
+  config.cache_ttl            = 86_400 # cache entry TTL in seconds (default: 24h)
+  config.timeout_seconds      = 5 # timeout for embedding / external API calls
 
   # --- Logging ---
   config.logger        = Rails.logger
@@ -52,9 +52,9 @@ LlmOptimizer.configure do |config|
   #     RubyLLM.chat(model: model, provider: provider, assume_model_exists: true) }
   #   end
   #
-  config.llm_caller = ->(prompt, model:) {
+  config.llm_caller = lambda { |_prompt, **_kwargs|
     raise NotImplementedError, "[llm_optimizer] llm_caller is not configured. " \
-      "Edit config/initializers/llm_optimizer.rb and wire it to your LLM client."
+                               "Edit config/initializers/llm_optimizer.rb and wire it to your LLM client."
   }
 
   # --- Embeddings caller (optional) ---

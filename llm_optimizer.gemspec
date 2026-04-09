@@ -9,7 +9,9 @@ Gem::Specification.new do |spec|
   spec.email = ["arunr.rubydev@gmail.com"]
 
   spec.summary = "Smart Gateway for LLM calls — semantic caching, model routing, token pruning, and history management."
-  spec.description = "llm_optimizer reduces LLM API costs by up to 80% through semantic caching (Redis + vector similarity), intelligent model routing, token pruning, and conversation history summarization. Strictly opt-in and non-invasive."
+  spec.description = "llm_optimizer reduces LLM API costs by up to 80% through semantic caching, " \
+                     "intelligent model routing, token pruning, and conversation history summarization. " \
+                     "Strictly opt-in and non-invasive."
   spec.homepage = "https://github.com/arunkumarry/llm_optimizer"
   spec.license = "MIT"
   spec.required_ruby_version = ">= 3.2.0"
@@ -18,6 +20,7 @@ Gem::Specification.new do |spec|
   spec.metadata["homepage_uri"] = spec.homepage
   spec.metadata["source_code_uri"] = "https://github.com/arunkumarry/llm_optimizer/tree/main"
   spec.metadata["changelog_uri"] = "https://github.com/arunkumarry/llm_optimizer/blob/main/CHANGELOG.md"
+  spec.metadata["rubygems_mfa_required"] = "true"
 
   # Specify which files should be added to the gem when it is released.
   # The `git ls-files -z` loads the files in the RubyGem that have been added into git.
@@ -33,13 +36,14 @@ Gem::Specification.new do |spec|
   spec.require_paths = ["lib"]
 
   # Runtime dependencies
-  spec.add_dependency "redis", "~> 5.0"
-  spec.add_dependency "msgpack", "~> 1.7"
   spec.add_dependency "logger", "~> 1.6"
+  spec.add_dependency "msgpack", "~> 1.7"
+  spec.add_dependency "redis", "~> 5.0"
 
   # Development dependencies
-  spec.add_development_dependency "prop_check", "~> 1.0"
   spec.add_development_dependency "mocha", "~> 2.0"
+  spec.add_development_dependency "overcommit", "~> 0.65"
+  spec.add_development_dependency "prop_check", "~> 1.0"
 
   # For more information and examples about making a new gem, check out our
   # guide at: https://bundler.io/guides/creating_gem.html

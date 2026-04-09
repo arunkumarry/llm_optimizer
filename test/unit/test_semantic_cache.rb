@@ -3,9 +3,11 @@
 require_relative "../test_helper"
 
 # Stub Redis::BaseError for unit tests (no real Redis gem needed)
-module Redis
-  class BaseError < StandardError; end
-end unless defined?(Redis::BaseError)
+unless defined?(Redis::BaseError)
+  module Redis
+    class BaseError < StandardError; end
+  end
+end
 
 class MockRedis
   def initialize
@@ -63,7 +65,7 @@ class TestSemanticCache < Minitest::Test
 
   def test_store_swallows_redis_error
     bad_redis = Object.new
-    def bad_redis.set(*); raise Redis::BaseError, "connection refused"; end
+    def bad_redis.set(*) = raise(Redis::BaseError, "connection refused")
     cache = LlmOptimizer::SemanticCache.new(bad_redis, threshold: 0.9, ttl: 3600)
     suppress_stderr { cache.store(EMBEDDING, RESPONSE) }
   end
@@ -82,7 +84,7 @@ class TestSemanticCache < Minitest::Test
   def test_lookup_returns_nil_below_threshold
     cache = LlmOptimizer::SemanticCache.new(@redis, threshold: 0.99, ttl: 3600)
     stored = [1.0, 0.0, 0.0]
-    query  = [0.0, 1.0, 0.0]  # orthogonal — similarity = 0.0
+    query  = [0.0, 1.0, 0.0] # orthogonal — similarity = 0.0
     cache.store(stored, RESPONSE)
     assert_nil cache.lookup(query)
   end
@@ -96,7 +98,7 @@ class TestSemanticCache < Minitest::Test
 
   def test_lookup_treats_redis_error_as_miss
     bad_redis = Object.new
-    def bad_redis.keys(*); raise Redis::BaseError, "timeout"; end
+    def bad_redis.keys(*) = raise(Redis::BaseError, "timeout")
     cache = LlmOptimizer::SemanticCache.new(bad_redis, threshold: 0.9, ttl: 3600)
     suppress_stderr { assert_nil cache.lookup(EMBEDDING) }
   end

@@ -29,8 +29,11 @@ module LlmOptimizer
     private
 
     def embed_via_openai(text)
-      api_key = ENV["OPENAI_API_KEY"]
-      raise EmbeddingError, "OPENAI_API_KEY is not set and no embedding_caller configured" if api_key.nil? || api_key.empty?
+      api_key = ENV.fetch("OPENAI_API_KEY", nil)
+      if api_key.nil? || api_key.empty?
+        raise EmbeddingError,
+              "OPENAI_API_KEY is not set and no embedding_caller configured"
+      end
 
       uri  = URI(OPENAI_ENDPOINT)
       body = JSON.generate({ model: @model, input: text })

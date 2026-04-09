@@ -54,7 +54,7 @@ class TestConfiguration < Minitest::Test
   end
 
   def test_default_cache_ttl
-    assert_equal 86400, LlmOptimizer::Configuration.new.cache_ttl
+    assert_equal 86_400, LlmOptimizer::Configuration.new.cache_ttl
   end
 
   def test_default_logger_is_logger_instance
@@ -83,7 +83,7 @@ class TestConfiguration < Minitest::Test
 
   def test_setting_llm_caller
     config = LlmOptimizer::Configuration.new
-    caller = ->(p, model:) { "response" }
+    caller = ->(_p, **_kwargs) { "response" }
     config.llm_caller = caller
     assert_equal caller, config.llm_caller
   end

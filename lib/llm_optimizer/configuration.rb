@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require "logger"
-require "set"
 
 module LlmOptimizer
   class Configuration
@@ -43,7 +42,7 @@ module LlmOptimizer
       @logger               = Logger.new($stdout)
       @debug_logging        = false
       @timeout_seconds      = 5
-      @cache_ttl            = 86400
+      @cache_ttl            = 86_400
       @llm_caller           = nil
       @embedding_caller     = nil
     end
@@ -56,7 +55,7 @@ module LlmOptimizer
       self
     end
 
-    def method_missing(name, *args, &block)
+    def method_missing(name, *args, &)
       key = name.to_s.chomp("=").to_sym
       raise ConfigurationError, "Unknown configuration key: #{key}" unless KNOWN_KEYS.include?(key)
 

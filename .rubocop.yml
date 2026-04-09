@@ -1,8 +1,72 @@
 AllCops:
   TargetRubyVersion: 3.2
+  NewCops: enable
+  Exclude:
+    - "bin/**/*"
+    - "vendor/**/*"
 
 Style/StringLiterals:
   EnforcedStyle: double_quotes
 
 Style/StringLiteralsInInterpolation:
   EnforcedStyle: double_quotes
+
+# Documentation comments are optional for internal gem classes
+Style/Documentation:
+  Enabled: false
+
+# Gemspec block is always long
+Metrics/BlockLength:
+  Exclude:
+    - "*.gemspec"
+    - "test/**/*.rb"
+
+# Test classes are naturally long
+Metrics/ClassLength:
+  Exclude:
+    - "test/**/*.rb"
+
+# The optimize method is intentionally a pipeline — complexity is expected
+Metrics/MethodLength:
+  Max: 130
+  Exclude:
+    - "test/**/*.rb"
+
+Metrics/AbcSize:
+  Max: 100
+
+Metrics/CyclomaticComplexity:
+  Max: 25
+
+Metrics/PerceivedComplexity:
+  Max: 25
+
+Metrics/ModuleLength:
+  Max: 200
+
+Metrics/ParameterLists:
+  Max: 10
+
+Layout/LineLength:
+  Max: 130
+  Exclude:
+    - "test/**/*.rb"
+    - "*.gemspec"
+
+# dev dependencies in gemspec is fine for gems
+Gemspec/DevelopmentDependencies:
+  Enabled: false
+
+# MockRedis uses short param names intentionally
+Naming/MethodParameterName:
+  Exclude:
+    - "test/**/*.rb"
+
+# test method names with numbers are fine
+Naming/VariableNumber:
+  Exclude:
+    - "test/**/*.rb"
+
+# Multiple classes in test files is fine (MockRedis + Test class)
+Style/OneClassPerFile:
+  Enabled: false

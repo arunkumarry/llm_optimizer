@@ -12,7 +12,7 @@ module LlmOptimizer
 
     def route(prompt)
       # explicit override
-      return @config.route_to if @config.route_to == :simple || @config.route_to == :complex
+      return @config.route_to if %i[simple complex].include?(@config.route_to)
 
       # fenced code block
       return :complex if CODE_BLOCK_RE.match?(prompt)
