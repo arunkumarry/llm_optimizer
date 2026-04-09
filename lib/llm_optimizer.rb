@@ -9,6 +9,8 @@ require_relative "llm_optimizer/embedding_client"
 require_relative "llm_optimizer/semantic_cache"
 require_relative "llm_optimizer/history_manager"
 
+require "llm_optimizer/railtie" if defined?(Rails)
+
 module LlmOptimizer
   # Base error class for all gem-specific exceptions
   class Error < StandardError; end
@@ -88,10 +90,13 @@ module LlmOptimizer
   def self.optimize(prompt, options = {}, &block)
     start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
-    # Resolve per-call configuration 
+    # Resolve per-call configuration — only pass known config keys
     call_config = Configuration.new
     call_config.merge!(configuration)
-    options.each { |k, v| call_config.public_send(:"#{k}=", v) }
+    options.each do |k, v|
+      next unless LlmOptimizer::Configuration::KNOWN_KEYS.include?(k.to_sym)
+      call_config.public_send(:"#{k}=", v)
+    end
     yield call_config if block_given?
 
     logger = call_config.logger
@@ -219,7 +224,7 @@ module LlmOptimizer
 
   rescue LlmOptimizer::Error, StandardError => e
     logger = configuration.logger
-    logger.error("[llm_optimizer] #{e.class}: #{e.message}")
+    logger.error("[llm_optimizer] #{e.class}: #{e.message}\n#{e.backtrace&.first(5)&.join("\n")}")
     latency_ms = elapsed_ms(start)
     response   = raw_llm_call(original_prompt, model: nil, config: configuration)
     OptimizeResult.new(

@@ -21,6 +21,7 @@ module LlmOptimizer
       timeout_seconds
       cache_ttl
       llm_caller
+      embedding_caller
     ].freeze
 
     attr_accessor(*KNOWN_KEYS)
