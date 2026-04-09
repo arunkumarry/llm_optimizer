@@ -1,0 +1,17 @@
+gemfile: Gemfile
+
+PreCommit:
+  RuboCop:
+    enabled: true
+    on_warn: fail
+    command: ["bundle", "exec", "rubocop"]
+    description: "Check RuboCop offenses"
+
+  MiniTest:
+    enabled: true
+    description: "Run Minitest suite"
+    required_executable: "bundle"
+    command: ["bundle", "exec", "rake", "test"]
+    include:
+      - "lib/**/*.rb"
+      - "test/**/*.rb"
