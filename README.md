@@ -243,4 +243,4 @@ MIT
 
 ---
 
-[GitHub](https://github.com/arunkumarry/llm_optimizer) · [RubyGems](https://rubygems.org/gems/llm_optimizer) · [Changelog](https://github.com/arunkumarry/llm_optimizer/blob/main/CHANGELOG.md) · [CONTRIBUTION](https://github.com/arunkumarry/llm_optimizer/blob/main/CONTRIBUTING.md)
+[GitHub](https://github.com/arunkumarry/llm_optimizer) · [RubyGems](https://rubygems.org/gems/llm_optimizer) · [Changelog](https://github.com/arunkumarry/llm_optimizer/blob/main/CHANGELOG.md)
