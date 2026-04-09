@@ -24,7 +24,8 @@ module LlmOptimizer
       embedding_caller
     ].freeze
 
-    attr_accessor(*KNOWN_KEYS)
+    # Define readers for all known keys (setters below track explicit sets)
+    KNOWN_KEYS.each { |key| define_method(key) { instance_variable_get(:"@#{key}") } }
 
     def initialize
       @explicitly_set = Set.new

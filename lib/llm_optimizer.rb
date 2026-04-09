@@ -44,13 +44,6 @@ module LlmOptimizer
       )
       config.use_semantic_cache = false
     end
-
-    if config.llm_caller.nil?
-      config.logger.warn(
-        "[llm_optimizer] No llm_caller configured. " \
-        "LlmOptimizer.optimize will raise ConfigurationError unless llm_caller is set."
-      )
-    end
   end
 
   # Returns the current global Configuration, lazy-initializing if nil.
