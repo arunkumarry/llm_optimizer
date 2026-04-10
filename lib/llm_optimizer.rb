@@ -158,7 +158,7 @@ module LlmOptimizer
     # History management
     messages = options[:messages]
     if call_config.manage_history && messages
-      llm_caller = ->(p, model:) { raw_llm_call(p, model: model) }
+      llm_caller = ->(p, model:) { raw_llm_call(p, model: model, config: call_config) }
       history_mgr = HistoryManager.new(
         llm_caller: llm_caller,
         simple_model: call_config.simple_model,
