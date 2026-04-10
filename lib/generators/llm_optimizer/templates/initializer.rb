@@ -64,5 +64,16 @@ LlmOptimizer.configure do |config|
   # Example:
   #   config.embedding_caller = ->(text) { EmbeddingService.embed(text) }
   #
-  # config.embedding_caller = nil
+  # --- Routing classifier (optional) ---
+  # When set, ambiguous prompts are classified by a cheap LLM instead of
+  # falling back to the word-count heuristic. Unambiguous signals (code blocks,
+  # keywords) still bypass the classifier for speed.
+  #
+  # Example:
+  #   config.classifier_caller = ->(prompt) {
+  #     RubyLLM.chat(model: "amazon.nova-micro-v1:0", assume_model_exists: true)
+  #       .ask(prompt).content.strip.downcase
+  #   }
+  #
+  # config.classifier_caller = nil
 end

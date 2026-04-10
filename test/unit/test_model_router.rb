@@ -101,4 +101,64 @@ class TestModelRouter < Minitest::Test
     r = router(route_to: :auto)
     assert_equal :simple, r.route("What time is it?")
   end
+
+  # LLM classifier
+
+  def test_classifier_called_for_ambiguous_prompt
+    called_with = nil
+    cfg = LlmOptimizer::Configuration.new
+    cfg.classifier_caller = lambda { |prompt|
+      called_with = prompt
+      "simple"
+    }
+    r = LlmOptimizer::ModelRouter.new(cfg)
+    result = r.route("Fix this bug")
+    assert_equal :simple, result
+    refute_nil called_with
+  end
+
+  def test_classifier_not_called_for_code_block
+    called = false
+    cfg = LlmOptimizer::Configuration.new
+    cfg.classifier_caller = lambda { |_p|
+      called = true
+      "simple"
+    }
+    r = LlmOptimizer::ModelRouter.new(cfg)
+    r.route("Here is code:\n```\nx = 1\n```")
+    refute called, "classifier should not be called when code block detected"
+  end
+
+  def test_classifier_not_called_for_complex_keyword
+    called = false
+    cfg = LlmOptimizer::Configuration.new
+    cfg.classifier_caller = lambda { |_p|
+      called = true
+      "simple"
+    }
+    r = LlmOptimizer::ModelRouter.new(cfg)
+    r.route("analyze this")
+    refute called, "classifier should not be called when keyword detected"
+  end
+
+  def test_classifier_failure_falls_back_to_heuristic
+    cfg = LlmOptimizer::Configuration.new
+    cfg.classifier_caller = ->(_p) { raise "API down" }
+    r = LlmOptimizer::ModelRouter.new(cfg)
+    assert_equal :simple, r.route("What time is it?")
+  end
+
+  def test_classifier_unrecognized_response_falls_back_to_heuristic
+    cfg = LlmOptimizer::Configuration.new
+    cfg.classifier_caller = ->(_p) { "maybe" }
+    r = LlmOptimizer::ModelRouter.new(cfg)
+    assert_equal :simple, r.route("What time is it?")
+  end
+
+  def test_classifier_returns_complex
+    cfg = LlmOptimizer::Configuration.new
+    cfg.classifier_caller = ->(_p) { "complex" }
+    r = LlmOptimizer::ModelRouter.new(cfg)
+    assert_equal :complex, r.route("Fix this bug")
+  end
 end

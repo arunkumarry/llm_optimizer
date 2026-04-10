@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.2] - 2026-04-10
 
+### Added
+- `classifier_caller` config option — injectable lambda for LLM-based prompt classification
+- Hybrid routing in `ModelRouter`: fast-path signals (code blocks, keywords) → LLM classifier → word-count heuristic fallback
+- Fixes misclassification of short-but-complex prompts (e.g. "Fix this bug") and long-but-simple prompts
+- Classifier failures (network errors, missing model, unexpected response) automatically fall through to heuristic — no app impact
+- Tests for classifier integration, failure fallback, and fast-path bypass
+
+### Changed
+- `ModelRouter` routing logic now uses three-layer decision chain instead of pure heuristics
+- README updated with classifier documentation and routing decision flow
+
+## [0.1.2] - 2026-04-10
+
 ### Fixed
 - `SemanticCache` used `pack("f*")` (32-bit) for both the Redis key hash and embedding serialization, causing precision loss on round-trip through MessagePack. Switched to `pack("G*")` / `unpack("G*")` (64-bit IEEE 754) — self-similarity is now exactly `1.0` and cache lookups work correctly with real embedding providers (Voyage AI, OpenAI, Cohere, etc.)
 - `HistoryManager` summarization failed with `ConfigurationError: No llm_caller configured` when invoked through the gateway pipeline. The internal `raw_llm_call` lambda was missing `config: call_config`, so it couldn't resolve the user's configured `llm_caller`

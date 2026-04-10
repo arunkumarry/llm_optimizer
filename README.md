@@ -18,11 +18,33 @@ Each stage is independently enabled via configuration flags. If any stage fails,
 Stores prompt embeddings in Redis. On subsequent calls, computes cosine similarity against stored embeddings. If similarity ≥ threshold, returns the cached response instantly no LLM call made.
 
 ### 2. Intelligent Model Routing
-Classifies each prompt using a heuristic and routes it to the appropriate model tier:
-- **Simple** — short prompts (< 20 words), no code blocks, no complex keywords → cheaper/faster model
-- **Complex** — code blocks, keywords like `analyze`, `refactor`, `debug`, `architect`, `explain in detail` → premium model
 
-WIP - Classifier call layer for context based routing.
+Classifies each prompt and routes it to the appropriate model tier:
+
+- **Simple** → cheaper/faster model (e.g. `gpt-4o-mini`, `amazon.nova-micro`)
+- **Complex** → premium model (e.g. `claude-3-5-sonnet`, `gpt-4o`)
+
+Routing uses a three-layer decision chain:
+
+1. **Explicit override** — if `route_to: :simple` or `:complex` is set, always use that
+2. **Fast-path signals** — code blocks (` ``` `, `~~~`) and keywords (`analyze`, `refactor`, `debug`, `architect`, `explain in detail`) → instantly `:complex`, no LLM call
+3. **LLM classifier** (optional) — for ambiguous prompts, calls a cheap model with a classification prompt; falls back to word-count heuristic if not configured or if the call fails
+
+This hybrid approach fixes the core weakness of pure heuristics:
+- `"Fix this bug"` → 3 words but `:complex` via classifier ✓
+- `"Explain Ruby blocks simply"` → long but `:simple` via classifier ✓
+- `"analyze this code"` → keyword fast-path → `:complex` instantly (no classifier call) ✓
+
+Configure the classifier with any cheap model your app already uses:
+
+```ruby
+config.classifier_caller = ->(prompt) {
+  RubyLLM.chat(model: "amazon.nova-micro-v1:0", provider: :bedrock, assume_model_exists: true)
+    .ask(prompt).content.strip.downcase
+}
+```
+
+If `classifier_caller` is not set, the router falls back to the word-count heuristic (< 20 words → `:simple`).
 
 ### 3. Token Pruning
 Removes common English stop words from prompts before sending to the LLM. Preserves fenced code block content unchanged. Typically reduces token count by 10–20%.
@@ -122,6 +144,13 @@ LlmOptimizer.configure do |config|
   config.embedding_caller = ->(text) {
     MyEmbeddingService.embed(text)
   }
+
+  # Classifier caller — optional, improves routing accuracy for ambiguous prompts
+  # Falls back to word-count heuristic if not set or if the call fails
+  config.classifier_caller = ->(prompt) {
+    RubyLLM.chat(model: "amazon.nova-micro-v1:0", provider: :bedrock, assume_model_exists: true)
+      .ask(prompt).content.strip.downcase
+  }
 end
 ```
 
@@ -145,6 +174,7 @@ end
 | `debug_logging` | Boolean | `false` | Log full prompt and response at DEBUG level |
 | `llm_caller` | Lambda | `nil` | `(prompt, model:) -> String` |
 | `embedding_caller` | Lambda | `nil` | `(text) -> Array<Float>` |
+| `classifier_caller` | Lambda | `nil` | `(prompt) -> "simple" or "complex"` |
 
 ## Per-call configuration
 

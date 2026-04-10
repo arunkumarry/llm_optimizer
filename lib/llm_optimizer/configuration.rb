@@ -21,6 +21,7 @@ module LlmOptimizer
       cache_ttl
       llm_caller
       embedding_caller
+      classifier_caller
     ].freeze
 
     # Define readers for all known keys (setters below track explicit sets)
@@ -45,6 +46,7 @@ module LlmOptimizer
       @cache_ttl            = 86_400
       @llm_caller           = nil
       @embedding_caller     = nil
+      @classifier_caller    = nil
     end
 
     # Copies only explicitly set keys from other_config without resetting unmentioned keys.
