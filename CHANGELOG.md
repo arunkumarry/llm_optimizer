@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-04-10
+
+### Fixed
+- `SemanticCache` used `pack("f*")` (32-bit) for both the Redis key hash and embedding serialization, causing precision loss on round-trip through MessagePack. Switched to `pack("G*")` / `unpack("G*")` (64-bit IEEE 754) — self-similarity is now exactly `1.0` and cache lookups work correctly with real embedding providers (Voyage AI, OpenAI, Cohere, etc.)
+- `HistoryManager` summarization failed with `ConfigurationError: No llm_caller configured` when invoked through the gateway pipeline. The internal `raw_llm_call` lambda was missing `config: call_config`, so it couldn't resolve the user's configured `llm_caller`
+- Updated `test/unit/test_gateway.rb` mock Redis helper to use `pack("G*")` to match the corrected `SemanticCache` key format
+
+### Added
+- `bin/test_semantic_cache.rb` — runnable smoke test for semantic cache using Voyage AI embeddings + Anthropic Claude
+- `bin/test_history_manager.rb` — runnable smoke test for history manager sliding window using Anthropic Claude
+
 ## [0.1.1] - 2026-04-10
 
 ### Fixed
@@ -46,5 +57,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `OptimizeResult` struct with `response`, `model`, `model_tier`, `cache_status`, `original_tokens`, `compressed_tokens`, `latency_ms`, `messages`
 - Unit test suite covering all components with positive and negative scenarios using Minitest + Mocha
 
-[Unreleased]: https://github.com/arunkumarry/llm_optimizer/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/arunkumarry/llm_optimizer/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/arunkumarry/llm_optimizer/compare/v0.1.1...v0.1.2
+[0.1.1]: https://github.com/arunkumarry/llm_optimizer/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/arunkumarry/llm_optimizer/releases/tag/v0.1.0
