@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.2] - 2026-04-10
+## [0.1.3] - 2026-04-10
 
 ### Added
 - `classifier_caller` config option — injectable lambda for LLM-based prompt classification
