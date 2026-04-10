@@ -1,6 +1,6 @@
 # llm_optimizer
 
-A Smart Gateway for LLM API calls in Ruby and Rails applications. Reduces token usage and API costs through four composable optimizations — all opt-in, all independently configurable.
+A Smart Gateway for LLM API calls in Ruby and Rails applications. Reduces token usage and API costs through four composable optimizations all opt-in, all independently configurable.
 
 ## How it works
 
@@ -10,17 +10,19 @@ Every call to `LlmOptimizer.optimize` passes through an ordered pipeline:
 prompt → Compressor → ModelRouter → SemanticCache lookup → HistoryManager → LLM call → SemanticCache store → OptimizeResult
 ```
 
-Each stage is independently enabled via configuration flags. If any stage fails, the gem falls through to a raw LLM call — your app never breaks because of the optimizer.
+Each stage is independently enabled via configuration flags. If any stage fails, the gem falls through to a raw LLM call your app never breaks because of the optimizer.
 
 ## Optimizations
 
 ### 1. Semantic Caching
-Stores prompt embeddings in Redis. On subsequent calls, computes cosine similarity against stored embeddings. If similarity ≥ threshold, returns the cached response instantly — no LLM call made.
+Stores prompt embeddings in Redis. On subsequent calls, computes cosine similarity against stored embeddings. If similarity ≥ threshold, returns the cached response instantly no LLM call made.
 
 ### 2. Intelligent Model Routing
 Classifies each prompt using a heuristic and routes it to the appropriate model tier:
 - **Simple** — short prompts (< 20 words), no code blocks, no complex keywords → cheaper/faster model
 - **Complex** — code blocks, keywords like `analyze`, `refactor`, `debug`, `architect`, `explain in detail` → premium model
+
+WIP - Classifier call layer for context based routing.
 
 ### 3. Token Pruning
 Removes common English stop words from prompts before sending to the LLM. Preserves fenced code block content unchanged. Typically reduces token count by 10–20%.
@@ -179,7 +181,7 @@ Transparently wrap an existing LLM client class so all calls through it are auto
 LlmOptimizer.wrap_client(OpenAI::Client)
 ```
 
-This prepends the optimization pipeline into the client's `chat` method. Safe to call multiple times — idempotent.
+This prepends the optimization pipeline into the client's `chat` method. Safe to call multiple times idempotent.
 
 ## OptimizeResult
 
