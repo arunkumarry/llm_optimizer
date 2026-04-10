@@ -233,8 +233,9 @@ class TestGateway < Minitest::Test
 
   def build_mock_redis_with_hit(response)
     embedding = EMBEDDING
-    payload   = MessagePack.pack({ "embedding" => embedding, "response" => response })
-    key       = "llm_optimizer:cache:#{Digest::SHA256.hexdigest(embedding.pack("f*"))}"
+    # Must use "G*" (64-bit) to match SemanticCache#cache_key and store format
+    payload   = MessagePack.pack({ "embedding" => embedding.pack("G*"), "response" => response })
+    key       = "llm_optimizer:cache:#{Digest::SHA256.hexdigest(embedding.pack("G*"))}"
 
     mock = Object.new
     mock.define_singleton_method(:keys) { |_pattern| [key] }

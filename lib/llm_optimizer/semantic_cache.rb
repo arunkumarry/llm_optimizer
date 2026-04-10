@@ -15,7 +15,13 @@ module LlmOptimizer
 
     def store(embedding, response)
       key     = cache_key(embedding)
-      payload = MessagePack.pack({ "embedding" => embedding, "response" => response })
+      # Serialize embedding as raw 64-bit big-endian doubles to preserve full
+      # Float precision. MessagePack silently downcasts Ruby Float to 32-bit,
+      # which corrupts cosine similarity on deserialization.
+      payload = MessagePack.pack({
+                                   "embedding" => embedding.pack("G*"), # binary string, lossless
+                                   "response" => response
+                                 })
       @redis.set(key, payload, ex: @ttl)
     rescue ::Redis::BaseError => e
       warn "[llm_optimizer] SemanticCache store failed: #{e.message}"
@@ -33,7 +39,8 @@ module LlmOptimizer
         next unless raw
 
         entry = MessagePack.unpack(raw)
-        stored_embedding = entry["embedding"]
+        # Unpack the binary string back to 64-bit doubles
+        stored_embedding = entry["embedding"].unpack("G*")
         score = cosine_similarity(embedding, stored_embedding)
 
         if score > best_score
@@ -60,7 +67,10 @@ module LlmOptimizer
     private
 
     def cache_key(embedding)
-      KEY_NAMESPACE + Digest::SHA256.hexdigest(embedding.pack("f*"))
+      # Use "G*" (64-bit big-endian double) to match Ruby's native Float precision.
+      # "f*" (32-bit) truncates precision and produces inconsistent hashes for the
+      # same embedding across serialize/deserialize round trips.
+      KEY_NAMESPACE + Digest::SHA256.hexdigest(embedding.pack("G*"))
     end
   end
 end
