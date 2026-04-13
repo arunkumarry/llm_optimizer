@@ -21,8 +21,8 @@ Stores prompt embeddings in Redis. On subsequent calls, computes cosine similari
 
 Classifies each prompt and routes it to the appropriate model tier:
 
-- **Simple** → cheaper/faster model (e.g. `gpt-4o-mini`, `amazon.nova-micro`)
-- **Complex** → premium model (e.g. `claude-3-5-sonnet`, `gpt-4o`)
+- **Simple** → cheaper/faster model (e.g. `llama3`, `gemini-2.5-flash-lite`)
+- **Complex** → premium model (e.g. `claude-haiku-4-5-20251001`, `gemini-3.0-pro`)
 
 Routing uses a three-layer decision chain:
 
@@ -99,7 +99,7 @@ result = LlmOptimizer.optimize("What is Redis?")
 puts result.response          # => "Redis is an in-memory data store..."
 puts result.cache_status      # => :hit or :miss
 puts result.model_tier        # => :simple or :complex
-puts result.model             # => "gpt-4o-mini"
+puts result.model             # => "gemini-2.5-flash-lite"
 puts result.original_tokens   # => 5
 puts result.compressed_tokens # => 4
 puts result.latency_ms        # => 12.4
@@ -110,48 +110,55 @@ puts result.latency_ms        # => 12.4
 ### Rails initializer
 
 ```ruby
+# config/initializers/llm_optimizer.rb
+require "llm_optimizer"
+
 LlmOptimizer.configure do |config|
-  # Feature flags — all off by default
+  # --- Feature flags (all off by default) ---
   config.compress_prompt    = true   # strip stop words before sending to LLM
   config.use_semantic_cache = true   # cache responses by vector similarity
   config.manage_history     = true   # summarize old messages when over token budget
 
-  # Model routing
-  config.route_to      = :auto          # :auto | :simple | :complex
-  config.simple_model  = "gpt-4o-mini"  # model used for simple prompts
-  config.complex_model = "claude-3-5-sonnet-20241022"  # model used for complex prompts
+  # --- Model routing ---
+  config.route_to      = :auto                        # :auto, :simple, or :complex
+  config.simple_model  = "gemini-2.5-flash-lite" # used for simple prompts
+  config.complex_model = "claude-haiku-4-5-20251001" # used for complex prompts
 
-  # Redis (required if use_semantic_cache: true)
+  # --- Redis (required if use_semantic_cache: true) ---
   config.redis_url = ENV["REDIS_URL"]
 
-  # Tuning
-  config.similarity_threshold = 0.96   # cosine similarity cutoff for cache hit (0.0–1.0)
-  config.token_budget         = 4000   # token limit before history summarization
-  config.cache_ttl            = 86400  # cache TTL in seconds (default: 24h)
+  # --- Token / cache settings ---
+  config.similarity_threshold = 0.96   # cosine similarity cutoff for cache hit
+  config.token_budget         = 4000   # max tokens before history summarization
+  config.cache_ttl            = 86400  # cache TTL in seconds (24h)
   config.timeout_seconds      = 5      # timeout for external API calls
 
-  # Logging
+  # --- Logging ---
   config.logger        = Rails.logger
-  config.debug_logging = Rails.env.development?  # logs full prompt+response at DEBUG level
+  config.debug_logging = Rails.env.development? # logs full prompt+response in dev
 
-  # LLM caller — wire to your existing LLM client (required)
+  # --- Wire up your app's LLM client ---
+  # Replace the body with however your app calls the LLM
   config.llm_caller = ->(prompt, model:) {
-    RubyLLM.chat(model: model, assume_model_exists: true).ask(prompt).content
+    model ||= "claude-haiku-4-5-20251001"
+    provider = if model.include?("claude") then :anthropic
+      elsif model.include?("gpt") then :openai
+      elsif model.include?("gemini") then :gemini
+      elsif model.include?("nova") || model.include?("amazon") then :bedrock
+      else :ollama
+      end
+    chat = RubyLLM.chat(model: model, provider: provider, assume_model_exists: true)
+    chat.ask(prompt).content
   }
 
-  # Embeddings caller — wire to your embeddings provider (required if use_semantic_cache: true)
-  # Falls back to OpenAI via ENV["OPENAI_API_KEY"] if not set
+  # --- Wire up your app's embeddings provider (optional) ---
+  # Only needed if use_semantic_cache: true.
+  # If not set, falls back to OpenAI via OPENAI_API_KEY env var.
   config.embedding_caller = ->(text) {
-    MyEmbeddingService.embed(text)
-  }
-
-  # Classifier caller — optional, improves routing accuracy for ambiguous prompts
-  # Falls back to word-count heuristic if not set or if the call fails
-  config.classifier_caller = ->(prompt) {
-    RubyLLM.chat(model: "amazon.nova-micro-v1:0", provider: :bedrock, assume_model_exists: true)
-      .ask(prompt).content.strip.downcase
+    Embedding::Embedding.new.embed_text(text)
   }
 end
+
 ```
 
 ### Configuration reference
@@ -162,14 +169,14 @@ end
 | `use_semantic_cache` | Boolean | `false` | Enable Redis-backed semantic cache |
 | `manage_history` | Boolean | `false` | Enable conversation history summarization |
 | `route_to` | Symbol | `:auto` | `:auto`, `:simple`, or `:complex` |
-| `simple_model` | String | `"gpt-4o-mini"` | Model for simple prompts |
-| `complex_model` | String | `"claude-3-5-sonnet-20241022"` | Model for complex prompts |
+| `simple_model` | String | `"gemini-2.5-flash-lite"` | Model for simple prompts |
+| `complex_model` | String | `"claude-haiku-4-5-20251001"` | Model for complex prompts |
 | `similarity_threshold` | Float | `0.96` | Minimum cosine similarity for cache hit |
 | `token_budget` | Integer | `4000` | Token limit before history summarization |
 | `cache_ttl` | Integer | `86400` | Cache entry TTL in seconds |
 | `timeout_seconds` | Integer | `5` | Timeout for external API calls |
 | `redis_url` | String | `nil` | Redis connection URL |
-| `embedding_model` | String | `"text-embedding-3-small"` | Embedding model name (OpenAI fallback) |
+| `embedding_model` | String | `"gemini-embedding-001"` | Embedding model name (OpenAI fallback) |
 | `logger` | Logger | `Logger.new($stdout)` | Any Logger-compatible object |
 | `debug_logging` | Boolean | `false` | Log full prompt and response at DEBUG level |
 | `llm_caller` | Lambda | `nil` | `(prompt, model:) -> String` |
