@@ -31,9 +31,9 @@ Routing uses a three-layer decision chain:
 3. **LLM classifier** (optional) — for ambiguous prompts, calls a cheap model with a classification prompt; falls back to word-count heuristic if not configured or if the call fails
 
 This hybrid approach fixes the core weakness of pure heuristics:
-- `"Fix this bug"` → 3 words but `:complex` via classifier ✓
-- `"Explain Ruby blocks simply"` → long but `:simple` via classifier ✓
-- `"analyze this code"` → keyword fast-path → `:complex` instantly (no classifier call) ✓
+- `"Fix this bug"` → 3 words but `:complex` via classifier
+- `"Explain Ruby blocks simply"` → long but `:simple` via classifier
+- `"analyze this code"` → keyword fast-path → `:complex` instantly (no classifier call)
 
 Configure the classifier with any cheap model your app already uses:
 

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-04-13
+
+### Fixed
+- `WrapperModule#chat` (used by `wrap_client`) incorrectly called `LlmOptimizer.optimize` internally which required `llm_caller` to be configured — causing `ConfigurationError` for users who only called `wrap_client`. Refactored into `optimize_pre_call` / `optimize_post_call` so the wrapped client handles the actual LLM call via `super`. `llm_caller` is no longer needed when using `wrap_client`
+
+### Added
+- `LlmOptimizer.optimize_pre_call(prompt, config)` — runs compress → route → cache lookup without making an LLM call; used internally by `WrapperModule` and available for advanced integrations
+- `LlmOptimizer.optimize_post_call(pre_call_result, response, config)` — stores a response in the semantic cache after an LLM call; used internally by `WrapperModule`
+
 ## [0.1.3] - 2026-04-10
 
 ### Added
@@ -70,7 +79,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `OptimizeResult` struct with `response`, `model`, `model_tier`, `cache_status`, `original_tokens`, `compressed_tokens`, `latency_ms`, `messages`
 - Unit test suite covering all components with positive and negative scenarios using Minitest + Mocha
 
-[Unreleased]: https://github.com/arunkumarry/llm_optimizer/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/arunkumarry/llm_optimizer/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/arunkumarry/llm_optimizer/compare/v0.1.3...v0.1.4
+[0.1.3]: https://github.com/arunkumarry/llm_optimizer/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/arunkumarry/llm_optimizer/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/arunkumarry/llm_optimizer/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/arunkumarry/llm_optimizer/releases/tag/v0.1.0

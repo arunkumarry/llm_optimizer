@@ -58,12 +58,35 @@ module LlmOptimizer
   end
 
   # Opt-in client wrapping
+  # WrapperModule intercepts `chat` on the wrapped client, runs the pre-call
+  # optimization pipeline (compress, route, cache lookup), and delegates the
+  # actual LLM call to the original client via `super` — so llm_caller is NOT
+  # required when using wrap_client.
   module WrapperModule
     def chat(params, &)
+      config = LlmOptimizer.configuration
       prompt = params[:messages] || params[:prompt]
-      optimized = LlmOptimizer.optimize(prompt)
-      params = params.merge(messages: optimized.messages, model: optimized.model)
-      super
+
+      # Run pre-call pipeline: compress, route, cache lookup
+      result = LlmOptimizer.optimize_pre_call(prompt, config)
+
+      # Cache hit — return immediately without calling the LLM
+      return result[:response] if result[:cache_status] == :hit
+
+      # Apply compressed prompt and routed model, then delegate to original client
+      optimized_params = params.merge(model: result[:model])
+      if params[:messages]
+        optimized_params = optimized_params.merge(messages: result[:prompt])
+      elsif params[:prompt]
+        optimized_params = optimized_params.merge(prompt: result[:prompt])
+      end
+
+      response = super(optimized_params, &)
+
+      # Store in cache after successful LLM call
+      LlmOptimizer.optimize_post_call(result, response, config)
+
+      response
     end
   end
 
@@ -229,6 +252,55 @@ module LlmOptimizer
       latency_ms: latency_ms,
       messages: options[:messages]
     )
+  end
+
+  # Pre-call pipeline for wrap_client: compress, route, cache lookup.
+  # Returns a hash with :prompt, :model, :model_tier, :embedding, :cache_status, :response.
+  # Does NOT make an LLM call — the wrapped client handles that via super.
+  def self.optimize_pre_call(prompt, config = configuration)
+    compressor = Compressor.new
+    prompt     = compressor.compress(prompt) if config.compress_prompt
+
+    router     = ModelRouter.new(config)
+    model_tier = router.route(prompt)
+    model      = model_tier == :simple ? config.simple_model : config.complex_model
+
+    embedding = nil
+    if config.use_semantic_cache && config.redis_url
+      begin
+        emb_client = EmbeddingClient.new(
+          model: config.embedding_model,
+          timeout_seconds: config.timeout_seconds,
+          embedding_caller: config.embedding_caller
+        )
+        embedding = emb_client.embed(prompt)
+        redis  = build_redis(config.redis_url)
+        cache  = SemanticCache.new(redis, threshold: config.similarity_threshold, ttl: config.cache_ttl)
+        cached = cache.lookup(embedding)
+        if cached
+          return { prompt: prompt, model: model, model_tier: model_tier,
+                   embedding: embedding, cache_status: :hit, response: cached }
+        end
+      rescue EmbeddingError => e
+        config.logger.warn("[llm_optimizer] wrap_client EmbeddingError (cache miss): #{e.message}")
+        embedding = nil
+      end
+    end
+
+    { prompt: prompt, model: model, model_tier: model_tier,
+      embedding: embedding, cache_status: :miss, response: nil }
+  end
+
+  # Post-call: store the LLM response in the semantic cache if applicable.
+  def self.optimize_post_call(pre_call_result, response, config = configuration)
+    return unless config.use_semantic_cache && config.redis_url
+    return unless pre_call_result[:embedding]
+
+    redis = build_redis(config.redis_url)
+    cache = SemanticCache.new(redis, threshold: config.similarity_threshold, ttl: config.cache_ttl)
+    cache.store(pre_call_result[:embedding], response)
+  rescue StandardError => e
+    config.logger.warn("[llm_optimizer] wrap_client cache store failed: #{e.message}")
   end
 
   # Private helpers
