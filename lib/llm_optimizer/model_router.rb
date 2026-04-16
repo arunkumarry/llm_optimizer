@@ -10,10 +10,12 @@ module LlmOptimizer
       Classify the following prompt as either 'simple' or 'complex'.
 
       Rules:
-      - simple: factual questions, basic lookups, short explanations, greetings
+      - simple: factual questions, basic lookups, short explanations, greetings, chitchat, general statements, simple mathematical calculations with additions, subtractions, multiplications and divisions
+        Example - Hello, Bye, You are funny, how are you?, what is the capital of France, tell me about yourself, what is 2 + 3 - 1 * 10 / 2 etc.
       - complex: code generation, debugging, architecture, multi-step reasoning, analysis
+        Example - how does pandas extract my information, debug this code, why is rag apps consume more tokens, give me code to print star in python etc.
 
-      Reply with exactly one word: simple or complex
+      Reply with exactly one word, no punctuation: simple or complex
 
       Prompt: %<prompt>s
     PROMPT
@@ -48,9 +50,12 @@ module LlmOptimizer
     def classify_with_llm(prompt)
       classifier_prompt = format(CLASSIFIER_PROMPT, prompt: prompt)
       response = @config.classifier_caller.call(classifier_prompt)
-      normalized = response.to_s.strip.downcase.gsub(/[^a-z]/, "")
-      return :simple  if normalized == "simple"
-      return :complex if normalized == "complex"
+      normalized = response.to_s.strip.downcase
+
+      # Check for word boundary match to handle responses like
+      # "simple." / "**simple**" / "the answer is simple"
+      return :simple  if normalized.match?(/\bsimple\b/)
+      return :complex if normalized.match?(/\bcomplex\b/)
 
       nil # unrecognized response — fall through to heuristic
     rescue StandardError
