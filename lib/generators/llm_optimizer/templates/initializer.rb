@@ -15,8 +15,8 @@ LlmOptimizer.configure do |config|
   # --- Model routing ---
   # :auto classifies each prompt; :simple or :complex forces a tier
   config.route_to      = :auto
-  config.simple_model  = "gpt-4o-mini"
-  config.complex_model = "gpt-4o"
+  config.simple_model  = "gemini-1.5-flash"
+  config.complex_model = "claude-haiku-4-5"
 
   # --- Redis (required only if use_semantic_cache: true) ---
   config.redis_url = ENV.fetch("REDIS_URL", nil)

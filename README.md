@@ -142,20 +142,25 @@ LlmOptimizer.configure do |config|
   config.llm_caller = ->(prompt, model:) {
     model ||= "claude-haiku-4-5-20251001"
     provider = if model.include?("claude") then :anthropic
-      elsif model.include?("gpt") then :openai
-      elsif model.include?("gemini") then :gemini
-      elsif model.include?("nova") || model.include?("amazon") then :bedrock
-      else :ollama
-      end
+               elsif model.include?("gpt") then :openai
+               elsif model.include?("gemini") then :gemini
+               else :ollama
+               end
     chat = RubyLLM.chat(model: model, provider: provider, assume_model_exists: true)
     chat.ask(prompt).content
   }
 
-  # --- Wire up your app's embeddings provider (optional) ---
-  # Only needed if use_semantic_cache: true.
-  # If not set, falls back to OpenAI via OPENAI_API_KEY env var.
+  # Embeddings caller — wire to your embeddings provider (required if use_semantic_cache: true)
   config.embedding_caller = ->(text) {
-    Embedding::Embedding.new.embed_text(text)
+    response = RubyLLM.embed(text, provider: :gemini, model: 'gemini-embedding-001')
+    response.vectors
+  }
+
+  # Classifier caller — optional, improves routing accuracy for ambiguous prompts
+  # Falls back to word-count heuristic if not set or if the call fails
+  config.classifier_caller = ->(prompt) {
+    RubyLLM.chat(model: "amazon.nova-micro-v1:0", provider: :bedrock, assume_model_exists: true)
+      .ask(prompt).content.strip.downcase
   }
 end
 
@@ -210,16 +215,6 @@ result = LlmOptimizer.optimize("What else can it do?", messages: messages)
 # result.messages contains the (possibly summarized) messages array
 ```
 
-## Opt-in client wrapping
-
-Transparently wrap an existing LLM client class so all calls through it are automatically optimized:
-
-```ruby
-LlmOptimizer.wrap_client(OpenAI::Client)
-```
-
-This prepends the optimization pipeline into the client's `chat` method. Safe to call multiple times idempotent.
-
 ## OptimizeResult
 
 Every call returns an `OptimizeResult` struct:
@@ -234,19 +229,6 @@ Every call returns an `OptimizeResult` struct:
 | `compressed_tokens` | Integer | Estimated token count after compression (`nil` if not compressed) |
 | `latency_ms` | Float | Total wall-clock time for the optimize call |
 | `messages` | Array | Final messages array (for history management) |
-
-## Error handling
-
-The gem defines a hierarchy of errors, all inheriting from `LlmOptimizer::Error`:
-
-```
-LlmOptimizer::Error
-├── LlmOptimizer::ConfigurationError  # unknown config key, missing llm_caller
-├── LlmOptimizer::EmbeddingError      # embedding API failure
-└── LlmOptimizer::TimeoutError        # network timeout exceeded
-```
-
-The gateway catches all component failures and falls through to a raw LLM call with the original prompt. Your app's core functionality is never blocked by the optimizer.
 
 ## Resilience
 
