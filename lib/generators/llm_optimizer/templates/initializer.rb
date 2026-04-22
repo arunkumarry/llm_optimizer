@@ -76,4 +76,41 @@ LlmOptimizer.configure do |config|
   #   }
   #
   # config.classifier_caller = nil
+
+  # --- Messages caller (optional) ---
+  # Messages caller for history manager/conversation summary - Optional
+
+  # OpenAI implmeentation -
+  # config.messages_caller = ->(messages, model:) {
+  #   response = $openai.chat(
+  #     parameters: {
+  #       model: model,
+  #       messages: messages.map { |m| { role: m[:role], content: m[:content] } }
+  #     }
+  #   )
+  #   response.dig("choices", 0, "message", "content")
+  # }
+
+  # RubyLLM implementation -
+  # config.messages_caller = ->(messages, model:) {
+  #   chat = RubyLLM.chat(model: model)
+  #   messages[0..-2].each { |m| chat.add_message(role: m[:role], content: m[:content]) }
+  #   chat.ask(messages.last[:content]).content
+  # }
+
+  # Anthropic implementation -
+  # config.messages_caller = ->(messages, model:) {
+  #   # Anthropic separates system messages from the messages array
+  #   system_msg = messages.find { |m| m[:role] == "system" }&.dig(:content)
+  #   chat_msgs  = messages.reject { |m| m[:role] == "system" }
+  #                       .map { |m| { role: m[:role], content: m[:content] } }
+
+  #   response = $anthropic.messages(
+  #     model: model,
+  #     max_tokens: 1024,
+  #     system: system_msg,
+  #     messages: chat_msgs
+  #   )
+  #   response["content"].first["text"]
+  # }
 end
