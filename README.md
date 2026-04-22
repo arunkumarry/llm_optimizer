@@ -50,7 +50,7 @@ If `classifier_caller` is not set, the router falls back to the word-count heuri
 Removes common English stop words from prompts before sending to the LLM. Preserves fenced code block content unchanged. Typically reduces token count by 10–20%.
 
 ### 4. Conversation History Sliding Window
-When a conversation history exceeds the configured token budget, summarizes the oldest messages using the simple model and replaces them with a single system summary message.
+When a conversation history exceeds the configured token budget, summarizes the oldest messages using the simple model and replaces them with a single system summary message. Uses Redis to store for fast reetreival and summarizing.
 
 ## Installation
 
@@ -162,6 +162,16 @@ LlmOptimizer.configure do |config|
     RubyLLM.chat(model: "amazon.nova-micro-v1:0", provider: :bedrock, assume_model_exists: true)
       .ask(prompt).content.strip.downcase
   }
+
+  # Messages caller - optional, handles converation summary and hostiry manager.
+  config.system_prompt = "You are a sarcastic comic person who gives witty responses in a non harmful way. If any serious question is asked, handle it in a calm way."
+
+  config.messages_caller = ->(messages, model:) {
+    chat = RubyLLM.chat(model: model)
+    messages[0..-2].each { |m| chat.add_message(role: m[:role], content: m[:content]) }
+    response = chat.ask(messages.last[:content])
+    response.content
+  }
 end
 
 ```
@@ -187,6 +197,9 @@ end
 | `llm_caller` | Lambda | `nil` | `(prompt, model:) -> String` |
 | `embedding_caller` | Lambda | `nil` | `(text) -> Array<Float>` |
 | `classifier_caller` | Lambda | `nil` | `(prompt) -> "simple" or "complex"` |
+| `messages_caller` | Lambda | `nil` | `(messages, model:) -> String` — used when `conversation_id` is present; receives full history including current user turn |
+| `system_prompt` | String | `nil` | Seeded as the first system message when a new conversation is created via `conversation_id` |
+| `conversation_ttl` | Integer | `86400` | TTL in seconds for Redis-backed conversation history (`0` for no expiry) |
 
 ## Per-call configuration
 
@@ -212,9 +225,6 @@ messages = [
 
 result = LlmOptimizer.optimize("What else can it do?", messages: messages)
 
-# result.messages contains the (possibly summarized) messages array
-```
-
 ## OptimizeResult
 
 Every call returns an `OptimizeResult` struct:
@@ -228,7 +238,9 @@ Every call returns an `OptimizeResult` struct:
 | `original_tokens` | Integer | Estimated token count before compression |
 | `compressed_tokens` | Integer | Estimated token count after compression (`nil` if not compressed) |
 | `latency_ms` | Float | Total wall-clock time for the optimize call |
-| `messages` | Array | Final messages array (for history management) |
+| `messages` | Array | Final messages array sent to the LLM, after history management and conversation hydration (`nil` on a cache hit) |
+
+The `messages` field reflects the actual array passed to `messages_caller` (or built from `conversation_id`), including any summarization applied by the history manager. You can pass it back as `options[:messages]` on the next call to continue a stateless conversation.
 
 ## Resilience
 
@@ -238,7 +250,9 @@ Every call returns an `OptimizeResult` struct:
 | Redis unavailable (write) | Log warning, return LLM result normally |
 | Embedding API failure | Treat as cache miss, continue |
 | Any component exception | Log error, fall through to raw LLM call |
-| History summarization failure | Log error, return original messages unchanged |
+| History summarization failure | Log warning, return original messages unchanged |
+| Conversation load failure | Log warning, proceed without history |
+| Conversation save failure | Log warning, return result with pre-save messages |
 
 ## Development
 

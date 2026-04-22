@@ -79,7 +79,8 @@ LlmOptimizer.configure do |config|
 
   # --- Messages caller (optional) ---
   # Messages caller for history manager/conversation summary - Optional
-
+  # config.system_prompt = "You are a helpful person who gives responses in a non harmful way. " \
+  #                  "If any serious question is asked, handle it in effectively."
   # OpenAI implmeentation -
   # config.messages_caller = ->(messages, model:) {
   #   response = $openai.chat(
