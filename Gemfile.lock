@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    llm_optimizer (0.1.4)
+    llm_optimizer (0.1.5)
       logger (~> 1.6)
       msgpack (~> 1.7)
       redis (~> 5.0)
@@ -107,7 +107,7 @@ CHECKSUMS
   json (2.19.3) sha256=289b0bb53052a1fa8c34ab33cc750b659ba14a5c45f3fcf4b18762dc67c78646
   language_server-protocol (3.17.0.5) sha256=fd1e39a51a28bf3eec959379985a72e296e9f9acfce46f6a79d31ca8760803cc
   lint_roller (1.1.0) sha256=2c0c845b632a7d172cb849cc90c1bce937a28c5c8ccccb50dfd46a485003cc87
-  llm_optimizer (0.1.4)
+  llm_optimizer (0.1.5)
   logger (1.7.0) sha256=196edec7cc44b66cfb40f9755ce11b392f21f7967696af15d274dde7edff0203
   minitest (5.27.0) sha256=2d3b17f8a36fe7801c1adcffdbc38233b938eb0b4966e97a6739055a45fa77d5
   mocha (2.8.2) sha256=1f77e729db47e72b4ef776461ce20caeec2572ffdf23365b0a03608fee8f4eee
