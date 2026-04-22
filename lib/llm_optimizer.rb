@@ -8,26 +8,21 @@ require_relative "llm_optimizer/model_router"
 require_relative "llm_optimizer/embedding_client"
 require_relative "llm_optimizer/semantic_cache"
 require_relative "llm_optimizer/history_manager"
+require_relative "llm_optimizer/conversation_store"
+require_relative "llm_optimizer/pipeline"
 
 require "llm_optimizer/railtie" if defined?(Rails)
 
 module LlmOptimizer
-  # Base error class for all gem-specific exceptions
   class Error < StandardError; end
-
-  # Raised when an unrecognized configuration key is set
   class ConfigurationError < Error; end
-
-  # Raised when the embedding API call fails
   class EmbeddingError < Error; end
-
-  # Raised when a network timeout is exceeded
   class TimeoutError < Error; end
 
-  # Global configuration
   @configuration = nil
 
-  # Yields a Configuration instance; merges it into the global config.
+  extend Pipeline
+
   def self.configure
     temp = Configuration.new
     yield temp
@@ -35,7 +30,6 @@ module LlmOptimizer
     validate_configuration!(configuration)
   end
 
-  # Warns about misconfigured options rather than failing silently at call time.
   def self.validate_configuration!(config)
     return unless config.use_semantic_cache && config.embedding_caller.nil?
 
@@ -46,34 +40,32 @@ module LlmOptimizer
     config.use_semantic_cache = false
   end
 
-  # Returns the current global Configuration, lazy-initializing if nil.
   def self.configuration
     @configuration ||= Configuration.new
   end
 
-  # Replaces the global config with a fresh default Configuration.
-  # Useful in tests to avoid state leakage.
   def self.reset_configuration!
     @configuration = Configuration.new
   end
 
-  # Opt-in client wrapping
-  # WrapperModule intercepts `chat` on the wrapped client, runs the pre-call
-  # optimization pipeline (compress, route, cache lookup), and delegates the
-  # actual LLM call to the original client via `super` — so llm_caller is NOT
-  # required when using wrap_client.
+  def self.clear_conversation(conversation_id)
+    raise ConfigurationError, "redis_url must be configured to use clear_conversation" unless configuration.redis_url
+
+    redis   = build_redis(configuration.redis_url)
+    key     = "#{ConversationStore::KEY_NAMESPACE}#{conversation_id}"
+    deleted = redis.del(key)
+    deleted.positive?
+  rescue ::Redis::BaseError => e
+    raise LlmOptimizer::Error, "Redis error in clear_conversation: #{e.message}"
+  end
+
   module WrapperModule
     def chat(params, &)
       config = LlmOptimizer.configuration
       prompt = params[:messages] || params[:prompt]
-
-      # Run pre-call pipeline: compress, route, cache lookup
       result = LlmOptimizer.optimize_pre_call(prompt, config)
-
-      # Cache hit — return immediately without calling the LLM
       return result[:response] if result[:cache_status] == :hit
 
-      # Apply compressed prompt and routed model, then delegate to original client
       optimized_params = params.merge(model: result[:model])
       if params[:messages]
         optimized_params = optimized_params.merge(messages: result[:prompt])
@@ -82,265 +74,78 @@ module LlmOptimizer
       end
 
       response = super(optimized_params, &)
-
-      # Store in cache after successful LLM call
       LlmOptimizer.optimize_post_call(result, response, config)
-
       response
     end
   end
 
-  # Prepends WrapperModule into client_class; idempotent — safe to call N times.
   def self.wrap_client(client_class)
     return if client_class.ancestors.include?(WrapperModule)
 
     client_class.prepend(WrapperModule)
   end
 
-  # Primary entry point
-  # Runs the optimization pipeline and returns an OptimizeResult.
+  def self.optimize(prompt, options = {}, &)
+    start           = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    call_config     = build_call_config(options, &)
+    conversation_id = options[:conversation_id]
+    validate_conversation_options!(conversation_id, options, call_config)
 
-  # options hash keys mirror Configuration attr_accessors and are merged over
-  # the global config for this call only.  An optional block is yielded a
-  # per-call Configuration for fine-grained control.
-  def self.optimize(prompt, options = {})
-    start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    original_prompt           = prompt
+    original_tokens           = Compressor.new.estimate_tokens(prompt)
+    prompt, compressed_tokens = compress(prompt, call_config)
+    model_tier, model         = route(prompt, call_config)
 
-    # Resolve per-call configuration — only pass known config keys
-    call_config = Configuration.new
-    call_config.merge!(configuration)
-    options.each do |k, v|
-      next unless LlmOptimizer::Configuration::KNOWN_KEYS.include?(k.to_sym)
+    embedding, cached_result = semantic_cache_lookup(prompt, model, model_tier,
+                                                     original_tokens, compressed_tokens,
+                                                     original_prompt, start, call_config)
+    return cached_result if cached_result
 
-      call_config.public_send(:"#{k}=", v)
-    end
-    yield call_config if block_given?
+    messages, store = load_conversation(conversation_id, options, call_config)
+    messages        = apply_history_manager(messages, call_config)
+    response        = raw_llm_call(prompt, messages: messages, model: model, config: call_config)
+    messages        = persist_conversation(store, conversation_id, messages, prompt, response)
+    store_in_cache(embedding, response, call_config)
 
-    logger = call_config.logger
-
-    # Keep a reference to the original prompt for fallback use
-    original_prompt = prompt
-
-    # Compression
-    compressor      = Compressor.new
-    original_tokens = compressor.estimate_tokens(prompt)
-    compressed_tokens = nil
-
-    if call_config.compress_prompt
-      prompt            = compressor.compress(prompt)
-      compressed_tokens = compressor.estimate_tokens(prompt)
-    end
-
-    # Model routing
-    router     = ModelRouter.new(call_config)
-    model_tier = router.route(prompt)
-    model      = model_tier == :simple ? call_config.simple_model : call_config.complex_model
-
-    # Semantic cache lookup
-    embedding = nil
-
-    if call_config.use_semantic_cache
-      begin
-        emb_client = EmbeddingClient.new(
-          model: call_config.embedding_model,
-          timeout_seconds: call_config.timeout_seconds,
-          embedding_caller: call_config.embedding_caller
-        )
-        embedding = emb_client.embed(prompt)
-
-        if call_config.redis_url
-          redis  = build_redis(call_config.redis_url)
-          cache  = SemanticCache.new(redis, threshold: call_config.similarity_threshold, ttl: call_config.cache_ttl)
-          cached = cache.lookup(embedding)
-
-          if cached
-            latency_ms = elapsed_ms(start)
-            emit_log(logger, call_config,
-                     cache_status: :hit, model_tier: model_tier,
-                     original_tokens: original_tokens, compressed_tokens: compressed_tokens,
-                     latency_ms: latency_ms, prompt: original_prompt, response: cached)
-            return OptimizeResult.new(
-              response: cached,
-              model: model,
-              model_tier: model_tier,
-              cache_status: :hit,
-              original_tokens: original_tokens,
-              compressed_tokens: compressed_tokens,
-              latency_ms: latency_ms,
-              messages: options[:messages]
-            )
-          end
-        end
-      rescue EmbeddingError => e
-        logger.warn("[llm_optimizer] EmbeddingError (treating as cache miss): #{e.message}")
-        embedding = nil
-        # continue pipeline as cache miss
-      end
-    end
-
-    # History management
-    messages = options[:messages]
-    if call_config.manage_history && messages
-      llm_caller = ->(p, model:) { raw_llm_call(p, model: model, config: call_config) }
-      history_mgr = HistoryManager.new(
-        llm_caller: llm_caller,
-        simple_model: call_config.simple_model,
-        token_budget: call_config.token_budget
-      )
-      messages = history_mgr.process(messages)
-    end
-
-    # Raw LLM call
-    response = raw_llm_call(prompt, model: model, config: call_config)
-
-    # Cache store
-    if call_config.use_semantic_cache && embedding && call_config.redis_url
-      begin
-        redis = build_redis(call_config.redis_url)
-        cache = SemanticCache.new(redis, threshold: call_config.similarity_threshold, ttl: call_config.cache_ttl)
-        cache.store(embedding, response)
-      rescue StandardError => e
-        logger.warn("[llm_optimizer] SemanticCache store failed: #{e.message}")
-      end
-    end
-
-    # Build result
     latency_ms = elapsed_ms(start)
-    emit_log(logger, call_config,
+    emit_log(call_config.logger, call_config,
              cache_status: :miss, model_tier: model_tier,
              original_tokens: original_tokens, compressed_tokens: compressed_tokens,
              latency_ms: latency_ms, prompt: original_prompt, response: response)
-
-    OptimizeResult.new(
-      response: response,
-      model: model,
-      model_tier: model_tier,
-      cache_status: :miss,
-      original_tokens: original_tokens,
-      compressed_tokens: compressed_tokens,
-      latency_ms: latency_ms,
-      messages: messages
-    )
+    build_result(response, model, model_tier, :miss, original_tokens, compressed_tokens,
+                 latency_ms, messages)
   rescue EmbeddingError => e
-    # Treat embedding failures as cache miss — continue to raw LLM call
-    logger = configuration.logger
-    logger.warn("[llm_optimizer] EmbeddingError (outer rescue, treating as cache miss): #{e.message}")
-    latency_ms = elapsed_ms(start)
-    response   = raw_llm_call(original_prompt, model: nil, config: configuration)
-    OptimizeResult.new(
-      response: response,
-      model: nil,
-      model_tier: nil,
-      cache_status: :miss,
-      original_tokens: original_tokens || 0,
-      compressed_tokens: nil,
-      latency_ms: latency_ms,
-      messages: options[:messages]
-    )
+    configuration.logger.warn("[llm_optimizer] EmbeddingError (outer rescue): #{e.message}")
+    fallback_result(original_prompt, original_tokens, options, start)
+  rescue ConfigurationError
+    raise
   rescue LlmOptimizer::Error, StandardError => e
-    logger = configuration.logger
-    logger.error("[llm_optimizer] #{e.class}: #{e.message}\n#{e.backtrace&.first(5)&.join("\n")}")
-    latency_ms = elapsed_ms(start)
-    response   = raw_llm_call(original_prompt, model: nil, config: configuration)
-    OptimizeResult.new(
-      response: response,
-      model: nil,
-      model_tier: nil,
-      cache_status: :miss,
-      original_tokens: original_tokens || 0,
-      compressed_tokens: nil,
-      latency_ms: latency_ms,
-      messages: options[:messages]
-    )
+    configuration.logger.error("[llm_optimizer] #{e.class}: #{e.message}\n#{e.backtrace&.first(5)&.join("\n")}")
+    fallback_result(original_prompt, original_tokens, options, start)
   end
 
-  # Pre-call pipeline for wrap_client: compress, route, cache lookup.
-  # Returns a hash with :prompt, :model, :model_tier, :embedding, :cache_status, :response.
-  # Does NOT make an LLM call — the wrapped client handles that via super.
   def self.optimize_pre_call(prompt, config = configuration)
-    compressor = Compressor.new
-    prompt     = compressor.compress(prompt) if config.compress_prompt
-
-    router     = ModelRouter.new(config)
-    model_tier = router.route(prompt)
+    prompt     = Compressor.new.compress(prompt) if config.compress_prompt
+    model_tier = ModelRouter.new(config).route(prompt)
     model      = model_tier == :simple ? config.simple_model : config.complex_model
 
-    embedding = nil
-    if config.use_semantic_cache && config.redis_url
-      begin
-        emb_client = EmbeddingClient.new(
-          model: config.embedding_model,
-          timeout_seconds: config.timeout_seconds,
-          embedding_caller: config.embedding_caller
-        )
-        embedding = emb_client.embed(prompt)
-        redis  = build_redis(config.redis_url)
-        cache  = SemanticCache.new(redis, threshold: config.similarity_threshold, ttl: config.cache_ttl)
-        cached = cache.lookup(embedding)
-        if cached
-          return { prompt: prompt, model: model, model_tier: model_tier,
-                   embedding: embedding, cache_status: :hit, response: cached }
-        end
-      rescue EmbeddingError => e
-        config.logger.warn("[llm_optimizer] wrap_client EmbeddingError (cache miss): #{e.message}")
-        embedding = nil
-      end
+    unless config.use_semantic_cache && config.redis_url
+      return { prompt: prompt, model: model, model_tier: model_tier,
+               embedding: nil, cache_status: :miss, response: nil }
+    end
+
+    embedding, result = semantic_cache_lookup(prompt, model, model_tier, nil, nil,
+                                              prompt, Process.clock_gettime(Process::CLOCK_MONOTONIC), config)
+    if result
+      return { prompt: prompt, model: model, model_tier: model_tier,
+               embedding: embedding, cache_status: :hit, response: result.response }
     end
 
     { prompt: prompt, model: model, model_tier: model_tier,
       embedding: embedding, cache_status: :miss, response: nil }
   end
 
-  # Post-call: store the LLM response in the semantic cache if applicable.
   def self.optimize_post_call(pre_call_result, response, config = configuration)
-    return unless config.use_semantic_cache && config.redis_url
-    return unless pre_call_result[:embedding]
-
-    redis = build_redis(config.redis_url)
-    cache = SemanticCache.new(redis, threshold: config.similarity_threshold, ttl: config.cache_ttl)
-    cache.store(pre_call_result[:embedding], response)
-  rescue StandardError => e
-    config.logger.warn("[llm_optimizer] wrap_client cache store failed: #{e.message}")
-  end
-
-  # Private helpers
-
-  class << self
-    private
-
-    def raw_llm_call(prompt, model:, config: nil)
-      caller = config&.llm_caller || @_current_llm_caller
-      unless caller
-        raise ConfigurationError,
-              "No llm_caller configured. " \
-              "Set it via LlmOptimizer.configure { |c| c.llm_caller = ->(prompt, model:) { ... } }"
-      end
-
-      caller.call(prompt, model: model)
-    end
-
-    def elapsed_ms(start)
-      ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - start) * 1000).round(2)
-    end
-
-    def emit_log(logger, config, cache_status:, model_tier:, original_tokens:,
-                 compressed_tokens:, latency_ms:, prompt:, response:)
-      logger.info(
-        "[llm_optimizer] { cache_status: #{cache_status.inspect}, " \
-        "model_tier: #{model_tier.inspect}, " \
-        "original_tokens: #{original_tokens.inspect}, " \
-        "compressed_tokens: #{compressed_tokens.inspect}, " \
-        "latency_ms: #{latency_ms.inspect} }"
-      )
-
-      return unless config.debug_logging
-
-      logger.debug("[llm_optimizer] prompt=#{prompt.inspect} response=#{response.inspect}")
-    end
-
-    def build_redis(redis_url)
-      require "redis"
-      Redis.new(url: redis_url)
-    end
+    store_in_cache(pre_call_result[:embedding], response, config)
   end
 end

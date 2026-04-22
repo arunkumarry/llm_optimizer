@@ -22,6 +22,9 @@ module LlmOptimizer
       llm_caller
       embedding_caller
       classifier_caller
+      conversation_ttl
+      system_prompt
+      messages_caller
     ].freeze
 
     # Define readers for all known keys (setters below track explicit sets)
@@ -47,6 +50,8 @@ module LlmOptimizer
       @llm_caller           = nil
       @embedding_caller     = nil
       @classifier_caller    = nil
+      @conversation_ttl     = 86_400
+      @system_prompt        = nil
     end
 
     # Copies only explicitly set keys from other_config without resetting unmentioned keys.

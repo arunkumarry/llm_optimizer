@@ -229,6 +229,105 @@ class TestGateway < Minitest::Test
     assert_includes log_output.string, prompt
   end
 
+  # ConversationStore integration
+
+  def test_conversation_id_with_messages_raises_configuration_error
+    assert_raises(LlmOptimizer::ConfigurationError) do
+      LlmOptimizer.optimize("hello", conversation_id: "conv-1", messages: [{ role: "user", content: "hi" }])
+    end
+  end
+
+  def test_conversation_id_without_redis_url_raises_configuration_error
+    # redis_url is nil by default after reset
+    assert_raises(LlmOptimizer::ConfigurationError) do
+      LlmOptimizer.optimize("hello", conversation_id: "conv-1")
+    end
+  end
+
+  def test_conversation_id_loads_history_calls_llm_saves_history
+    stored = {}
+    mock_redis = build_mock_redis_for_conversation(stored)
+
+    LlmOptimizer.configure { |c| c.redis_url = "redis://localhost:6379" }
+    LlmOptimizer.stubs(:build_redis).returns(mock_redis)
+
+    result = LlmOptimizer.optimize("What is 2+2?", conversation_id: "conv-abc")
+
+    assert_equal LLM_RESPONSE, result.response
+    # Redis should have been written with the new messages
+    key = "llm_optimizer:conversation:conv-abc"
+    assert stored.key?(key), "Expected Redis key to be set"
+    saved = JSON.parse(stored[key], symbolize_names: true)
+    assert_equal "user",      saved.last(2).first[:role]
+    assert_equal "assistant", saved.last[:role]
+    assert_equal LLM_RESPONSE, saved.last[:content]
+  ensure
+    LlmOptimizer.unstub(:build_redis)
+  end
+
+  # clear_conversation
+
+  def test_clear_conversation_returns_true_when_key_exists
+    mock_redis = Object.new
+    mock_redis.define_singleton_method(:del) { |_key| 1 }
+    LlmOptimizer.configure { |c| c.redis_url = "redis://localhost:6379" }
+    LlmOptimizer.stubs(:build_redis).returns(mock_redis)
+    assert_equal true, LlmOptimizer.clear_conversation("conv-1")
+  ensure
+    LlmOptimizer.unstub(:build_redis)
+  end
+
+  def test_clear_conversation_returns_false_when_key_absent
+    mock_redis = Object.new
+    mock_redis.define_singleton_method(:del) { |_key| 0 }
+    LlmOptimizer.configure { |c| c.redis_url = "redis://localhost:6379" }
+    LlmOptimizer.stubs(:build_redis).returns(mock_redis)
+    assert_equal false, LlmOptimizer.clear_conversation("conv-missing")
+  ensure
+    LlmOptimizer.unstub(:build_redis)
+  end
+
+  def test_clear_conversation_raises_error_on_redis_failure
+    mock_redis = Object.new
+    mock_redis.define_singleton_method(:del) { |_key| raise Redis::BaseError, "connection refused" }
+    LlmOptimizer.configure { |c| c.redis_url = "redis://localhost:6379" }
+    LlmOptimizer.stubs(:build_redis).returns(mock_redis)
+    err = assert_raises(LlmOptimizer::Error) { LlmOptimizer.clear_conversation("conv-1") }
+    assert_includes err.message, "Redis error in clear_conversation"
+  ensure
+    LlmOptimizer.unstub(:build_redis)
+  end
+
+  def test_clear_conversation_raises_configuration_error_when_no_redis_url
+    # redis_url is nil after reset
+    assert_raises(LlmOptimizer::ConfigurationError) do
+      LlmOptimizer.clear_conversation("conv-1")
+    end
+  end
+
+  def test_calls_without_conversation_id_make_zero_redis_interactions
+    redis_calls = 0
+    spy_redis = Object.new
+    spy_redis.define_singleton_method(:get) do |*_|
+      redis_calls += 1
+      nil
+    end
+    spy_redis.define_singleton_method(:set) do |*_|
+      redis_calls += 1
+      nil
+    end
+    spy_redis.define_singleton_method(:keys) do |*_|
+      redis_calls += 1
+      []
+    end
+
+    LlmOptimizer.stubs(:build_redis).returns(spy_redis)
+    LlmOptimizer.optimize("hello world")
+    assert_equal 0, redis_calls
+  ensure
+    LlmOptimizer.unstub(:build_redis)
+  end
+
   private
 
   def build_mock_redis_with_hit(response)
@@ -248,6 +347,16 @@ class TestGateway < Minitest::Test
     mock = Object.new
     mock.define_singleton_method(:keys) { |_pattern| [] }
     mock.define_singleton_method(:set)  { |*_args| nil }
+    mock
+  end
+
+  def build_mock_redis_for_conversation(store = {})
+    mock = Object.new
+    mock.define_singleton_method(:get)  { |key| store[key] }
+    mock.define_singleton_method(:set)  do |key, value, *_opts|
+      store[key] = value
+      "OK"
+    end
     mock
   end
 end
