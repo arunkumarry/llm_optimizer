@@ -212,19 +212,6 @@ result = LlmOptimizer.optimize(prompt) do |config|
 end
 ```
 
-## Conversation history
-
-Pass a `messages` array to enable history management:
-
-```ruby
-messages = [
-  { role: "user",      content: "Tell me about Redis" },
-  { role: "assistant", content: "Redis is an in-memory data store..." },
-  # ... more messages
-]
-
-result = LlmOptimizer.optimize("What else can it do?", messages: messages)
-
 ## OptimizeResult
 
 Every call returns an `OptimizeResult` struct:
