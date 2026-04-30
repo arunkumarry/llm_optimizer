@@ -25,6 +25,7 @@ module LlmOptimizer
       conversation_ttl
       system_prompt
       messages_caller
+      cache_scope
     ].freeze
 
     # Define readers for all known keys (setters below track explicit sets)
