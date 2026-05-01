@@ -9,31 +9,6 @@ unless defined?(Redis::BaseError)
   end
 end
 
-class MockRedis
-  def initialize
-    @store = {}
-    @ttls  = {}
-  end
-
-  def set(key, value, ex: nil)
-    @store[key] = value
-    @ttls[key]  = ex
-  end
-
-  def get(key)
-    @store[key]
-  end
-
-  def keys(pattern)
-    prefix = pattern.chomp("*")
-    @store.keys.select { |k| k.start_with?(prefix) }
-  end
-
-  def ttl(key)
-    @ttls[key] || -1
-  end
-end
-
 class TestSemanticCache < Minitest::Test
   EMBEDDING = [1.0, 0.0, 0.0].freeze
   RESPONSE  = "cached response"
@@ -136,6 +111,41 @@ class TestSemanticCache < Minitest::Test
 
   def test_cosine_similarity_zero_vector_returns_zero
     assert_equal 0.0, @cache.cosine_similarity([0.0, 0.0], [1.0, 2.0])
+  end
+
+  # cache_scope
+
+  def test_store_with_scope_uses_scoped_prefix
+    cache = LlmOptimizer::SemanticCache.new(@redis, threshold: 0.9, ttl: 3600, cache_scope: "user_123")
+    cache.store(EMBEDDING, RESPONSE)
+    key = @redis.keys("llm_optimizer:cache:user_123:*").first
+    refute_nil key
+    assert key.start_with?("llm_optimizer:cache:user_123:")
+  end
+
+  def test_lookup_with_scope_only_finds_in_scope
+    # Store in scope A
+    cache_a = LlmOptimizer::SemanticCache.new(@redis, threshold: 0.9, ttl: 3600, cache_scope: "scope_a")
+    cache_a.store(EMBEDDING, "response a")
+
+    # Store in scope B
+    cache_b = LlmOptimizer::SemanticCache.new(@redis, threshold: 0.9, ttl: 3600, cache_scope: "scope_b")
+    cache_b.store(EMBEDDING, "response b")
+
+    # Lookup in scope A should find response a
+    assert_equal "response a", cache_a.lookup(EMBEDDING)
+
+    # Lookup in scope B should find response b
+    assert_equal "response b", cache_b.lookup(EMBEDDING)
+
+    # Lookup with no scope should find nothing (prefix is different)
+    assert_nil @cache.lookup(EMBEDDING)
+  end
+
+  def test_cache_key_with_scope
+    cache = LlmOptimizer::SemanticCache.new(@redis, threshold: 0.9, ttl: 3600, cache_scope: "my_scope")
+    key = cache.send(:cache_key, EMBEDDING)
+    assert_match(/^llm_optimizer:cache:my_scope:[a-f0-9]{64}$/, key)
   end
 
   # round trip

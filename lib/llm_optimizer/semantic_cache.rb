@@ -32,6 +32,11 @@ module LlmOptimizer
       prefix = KEY_NAMESPACE
       prefix += "#{@cache_scope}:" if @cache_scope
       keys = @redis.keys("#{prefix}*")
+
+      # If no scope is provided, exclude keys that belong to a scope (contain more than 2 colons)
+      # to ensure isolation from scoped entries.
+      keys.reject! { |k| k.count(":") > 2 } unless @cache_scope
+
       return nil if keys.empty?
 
       best_score    = -Float::INFINITY

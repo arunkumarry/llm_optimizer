@@ -98,7 +98,7 @@ module LlmOptimizer
 
       redis = build_redis(config.redis_url)
       cache = SemanticCache.new(redis, threshold: config.similarity_threshold, ttl: config.cache_ttl,
-                                      cache_scope: config.cache_scope)
+                                       cache_scope: config.cache_scope)
       cache.store(embedding, response)
     rescue StandardError => e
       config.logger.warn("[llm_optimizer] SemanticCache store failed: #{e.message}")
@@ -159,7 +159,7 @@ module LlmOptimizer
 
       redis  = build_redis(config.redis_url)
       cache  = SemanticCache.new(redis, threshold: config.similarity_threshold, ttl: config.cache_ttl,
-                                      cache_scope: config.cache_scope)
+                                        cache_scope: config.cache_scope)
       cached = cache.lookup(embedding)
       return [embedding, nil] unless cached
 
