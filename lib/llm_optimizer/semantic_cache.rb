@@ -7,10 +7,11 @@ module LlmOptimizer
   class SemanticCache
     KEY_NAMESPACE = "llm_optimizer:cache:"
 
-    def initialize(redis_client, threshold:, ttl:)
-      @redis     = redis_client
-      @threshold = threshold
-      @ttl       = ttl
+    def initialize(redis_client, threshold:, ttl:, cache_scope: nil)
+      @redis       = redis_client
+      @threshold   = threshold
+      @ttl         = ttl
+      @cache_scope = cache_scope
     end
 
     def store(embedding, response)
@@ -28,7 +29,14 @@ module LlmOptimizer
     end
 
     def lookup(embedding)
-      keys = @redis.keys("#{KEY_NAMESPACE}*")
+      prefix = KEY_NAMESPACE
+      prefix += "#{@cache_scope}:" if @cache_scope
+      keys = @redis.keys("#{prefix}*")
+
+      # If no scope is provided, exclude keys that belong to a scope (contain more than 2 colons)
+      # to ensure isolation from scoped entries.
+      keys.reject! { |k| k.count(":") > 2 } unless @cache_scope
+
       return nil if keys.empty?
 
       best_score    = -Float::INFINITY
@@ -70,7 +78,9 @@ module LlmOptimizer
       # Use "G*" (64-bit big-endian double) to match Ruby's native Float precision.
       # "f*" (32-bit) truncates precision and produces inconsistent hashes for the
       # same embedding across serialize/deserialize round trips.
-      KEY_NAMESPACE + Digest::SHA256.hexdigest(embedding.pack("G*"))
+      prefix = KEY_NAMESPACE
+      prefix += "#{@cache_scope}:" if @cache_scope
+      prefix + Digest::SHA256.hexdigest(embedding.pack("G*"))
     end
   end
 end

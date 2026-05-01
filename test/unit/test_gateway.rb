@@ -157,6 +157,35 @@ class TestGateway < Minitest::Test
     LlmOptimizer.unstub(:build_redis)
   end
 
+  def test_cache_scope_isolates_hits
+    mock_redis = MockRedis.new
+
+    LlmOptimizer.configure do |c|
+      c.use_semantic_cache = true
+      c.redis_url          = "redis://localhost:6379"
+      c.embedding_caller   = ->(_text) { EMBEDDING }
+      c.llm_caller         = ->(_p, **_k) { "response" }
+    end
+    LlmOptimizer.stubs(:build_redis).returns(mock_redis)
+
+    # Store in scope 1
+    LlmOptimizer.optimize("test prompt") { |c| c.cache_scope = "scope1" }
+
+    # Lookup in scope 1 should hit
+    result1 = LlmOptimizer.optimize("test prompt") { |c| c.cache_scope = "scope1" }
+    assert_equal :hit, result1.cache_status
+
+    # Lookup in scope 2 should miss
+    result2 = LlmOptimizer.optimize("test prompt") { |c| c.cache_scope = "scope2" }
+    assert_equal :miss, result2.cache_status
+
+    # Lookup without scope should miss
+    result3 = LlmOptimizer.optimize("test prompt")
+    assert_equal :miss, result3.cache_status
+  ensure
+    LlmOptimizer.unstub(:build_redis)
+  end
+
   # wrap_client
 
   def test_wrap_client_prepends_wrapper_module

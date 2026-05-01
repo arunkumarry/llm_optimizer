@@ -73,6 +73,10 @@ class TestConfiguration < Minitest::Test
     assert_nil LlmOptimizer::Configuration.new.redis_url
   end
 
+  def test_default_cache_scope_is_nil
+    assert_nil LlmOptimizer::Configuration.new.cache_scope
+  end
+
   # Setters
 
   def test_setting_known_key
