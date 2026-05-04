@@ -103,17 +103,18 @@ module LlmOptimizer
 
     messages, store = load_conversation(conversation_id, options, call_config)
     messages        = apply_history_manager(messages, call_config)
-    response        = raw_llm_call(prompt, messages: messages, model: model, config: call_config)
-    messages        = persist_conversation(store, conversation_id, messages, prompt, response)
-    store_in_cache(embedding, response, call_config)
+    response, token_info = raw_llm_call(prompt, messages: messages, model: model, config: call_config)
+    messages = persist_conversation(store, conversation_id, messages, prompt, response)
+    store_in_cache(embedding, response, call_config, token_info)
 
     latency_ms = elapsed_ms(start)
     emit_log(call_config.logger, call_config,
              cache_status: :miss, model_tier: model_tier,
              original_tokens: original_tokens, compressed_tokens: compressed_tokens,
              latency_ms: latency_ms, prompt: original_prompt, response: response)
+
     build_result(response, model, model_tier, :miss, original_tokens, compressed_tokens,
-                 latency_ms, messages)
+                 latency_ms, messages, token_info)
   rescue EmbeddingError => e
     configuration.logger.warn("[llm_optimizer] EmbeddingError (outer rescue): #{e.message}")
     fallback_result(original_prompt, original_tokens, options, start)

@@ -19,7 +19,7 @@ class TestGateway < Minitest::Test
   def setup
     LlmOptimizer.reset_configuration!
     LlmOptimizer.configure do |c|
-      c.llm_caller      = ->(_prompt, **_kwargs) { LLM_RESPONSE }
+      c.llm_caller      = ->(_prompt, **_kwargs) { { content: LLM_RESPONSE, input_tokens: 10, output_tokens: 20 } }
       c.logger          = Logger.new(nil) # silence logs in tests
     end
   end
@@ -65,6 +65,18 @@ class TestGateway < Minitest::Test
     result = LlmOptimizer.optimize("What is Redis?")
     assert_kind_of Float, result.latency_ms
     assert result.latency_ms >= 0
+  end
+
+  def test_result_has_input_tokens
+    result = LlmOptimizer.optimize("What is Redis?")
+    assert_kind_of Integer, result.input_tokens
+    assert result.input_tokens.positive?
+  end
+
+  def test_result_has_output_tokens
+    result = LlmOptimizer.optimize("What is Redis?")
+    assert_kind_of Integer, result.output_tokens
+    assert result.output_tokens.positive?
   end
 
   # Model routing
@@ -256,6 +268,67 @@ class TestGateway < Minitest::Test
     prompt = "debug prompt content"
     LlmOptimizer.optimize(prompt)
     assert_includes log_output.string, prompt
+  end
+
+  # Tools
+
+  def test_passes_with_tools_to_llm_caller
+    passed_tools = nil
+    LlmOptimizer.configure do |c|
+      c.llm_caller = lambda { |_p, **kwargs|
+        passed_tools = kwargs[:tools]
+        "response"
+      }
+    end
+
+    tools = [{ name: "get_weather", description: "Get weather" }]
+    LlmOptimizer.optimize("What is the weather?", with_tools: tools)
+    assert_equal tools, passed_tools
+  end
+
+  def test_passes_with_tools_to_messages_caller
+    passed_tools = nil
+    LlmOptimizer.configure do |c|
+      c.messages_caller = lambda { |_m, **kwargs|
+        passed_tools = kwargs[:tools]
+        "response"
+      }
+    end
+
+    tools = [{ name: "get_weather", description: "Get weather" }]
+    LlmOptimizer.optimize("What is the weather?", messages: [{ role: "user", content: "hi" }], with_tools: tools)
+    assert_equal tools, passed_tools
+  end
+
+  def test_supports_tools_as_alias_to_with_tools
+    passed_tools = nil
+    LlmOptimizer.configure do |c|
+      c.llm_caller = lambda { |_p, **kwargs|
+        passed_tools = kwargs[:tools]
+        "response"
+      }
+    end
+
+    tools = [{ name: "get_weather", description: "Get weather" }]
+    LlmOptimizer.optimize("What is the weather?", tools: tools)
+    assert_equal tools, passed_tools
+  end
+
+  def test_per_call_with_tools_overrides_global
+    global_tools = [{ name: "global" }]
+    local_tools  = [{ name: "local" }]
+    passed_tools = nil
+
+    LlmOptimizer.configure do |c|
+      c.with_tools = global_tools
+      c.llm_caller = lambda { |_p, **kwargs|
+        passed_tools = kwargs[:tools]
+        "response"
+      }
+    end
+
+    LlmOptimizer.optimize("hi") { |c| c.with_tools = local_tools }
+    assert_equal local_tools, passed_tools
   end
 
   # ConversationStore integration

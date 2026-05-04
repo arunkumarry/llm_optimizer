@@ -26,6 +26,9 @@ module LlmOptimizer
       system_prompt
       messages_caller
       cache_scope
+      tools
+      with_tools
+      tools_caller
     ].freeze
 
     # Define readers for all known keys (setters below track explicit sets)
@@ -53,6 +56,7 @@ module LlmOptimizer
       @classifier_caller    = nil
       @conversation_ttl     = 86_400
       @system_prompt        = nil
+      @with_tools           = nil
     end
 
     # Copies only explicitly set keys from other_config without resetting unmentioned keys.

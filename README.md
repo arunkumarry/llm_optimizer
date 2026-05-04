@@ -200,6 +200,7 @@ end
 | `messages_caller` | Lambda | `nil` | `(messages, model:) -> String` — used when `conversation_id` is present; receives full history including current user turn |
 | `system_prompt` | String | `nil` | Seeded as the first system message when a new conversation is created via `conversation_id` |
 | `conversation_ttl` | Integer | `86400` | TTL in seconds for Redis-backed conversation history (`0` for no expiry) |
+| `with_tools` | Array | `nil` | Tools (functions) available to the LLM; passed as `tools:` keyword to callers |
 
 ## Per-call configuration
 

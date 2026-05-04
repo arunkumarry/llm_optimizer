@@ -53,7 +53,8 @@ class TestSemanticCache < Minitest::Test
 
   def test_lookup_returns_response_on_exact_match
     @cache.store(EMBEDDING, RESPONSE)
-    assert_equal RESPONSE, @cache.lookup(EMBEDDING)
+    result, _info = @cache.lookup(EMBEDDING)
+    assert_equal RESPONSE, result
   end
 
   def test_lookup_returns_nil_below_threshold
@@ -67,7 +68,7 @@ class TestSemanticCache < Minitest::Test
   def test_lookup_returns_best_match_above_threshold
     @cache.store([1.0, 0.0, 0.0], "first")
     @cache.store([0.0, 1.0, 0.0], "second")
-    result = @cache.lookup([1.0, 0.0, 0.0])
+    result, _info = @cache.lookup([1.0, 0.0, 0.0])
     assert_equal "first", result
   end
 
@@ -133,10 +134,12 @@ class TestSemanticCache < Minitest::Test
     cache_b.store(EMBEDDING, "response b")
 
     # Lookup in scope A should find response a
-    assert_equal "response a", cache_a.lookup(EMBEDDING)
+    result_a, _info = cache_a.lookup(EMBEDDING)
+    assert_equal "response a", result_a
 
     # Lookup in scope B should find response b
-    assert_equal "response b", cache_b.lookup(EMBEDDING)
+    result_b, _info = cache_b.lookup(EMBEDDING)
+    assert_equal "response b", result_b
 
     # Lookup with no scope should find nothing (prefix is different)
     assert_nil @cache.lookup(EMBEDDING)
@@ -154,7 +157,8 @@ class TestSemanticCache < Minitest::Test
     embedding = [0.5, 0.5, 0.5]
     response  = "round trip response"
     @cache.store(embedding, response)
-    assert_equal response, @cache.lookup(embedding)
+    result, _info = @cache.lookup(embedding)
+    assert_equal response, result
   end
 
   private

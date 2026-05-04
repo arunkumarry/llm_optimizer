@@ -14,14 +14,12 @@ module LlmOptimizer
       @cache_scope = cache_scope
     end
 
-    def store(embedding, response)
+    def store(embedding, response, token_info = {})
       key     = cache_key(embedding)
-      # Serialize embedding as raw 64-bit big-endian doubles to preserve full
-      # Float precision. MessagePack silently downcasts Ruby Float to 32-bit,
-      # which corrupts cosine similarity on deserialization.
       payload = MessagePack.pack({
-                                   "embedding" => embedding.pack("G*"), # binary string, lossless
-                                   "response" => response
+                                   "embedding" => embedding.pack("G*"),
+                                   "response" => response,
+                                   "token_info" => token_info
                                  })
       @redis.set(key, payload, ex: @ttl)
     rescue ::Redis::BaseError => e
@@ -33,31 +31,28 @@ module LlmOptimizer
       prefix += "#{@cache_scope}:" if @cache_scope
       keys = @redis.keys("#{prefix}*")
 
-      # If no scope is provided, exclude keys that belong to a scope (contain more than 2 colons)
-      # to ensure isolation from scoped entries.
       keys.reject! { |k| k.count(":") > 2 } unless @cache_scope
 
       return nil if keys.empty?
 
       best_score    = -Float::INFINITY
-      best_response = nil
+      best_entry    = nil
 
       keys.each do |key|
         raw = @redis.get(key)
         next unless raw
 
         entry = MessagePack.unpack(raw)
-        # Unpack the binary string back to 64-bit doubles
         stored_embedding = entry["embedding"].unpack("G*")
         score = cosine_similarity(embedding, stored_embedding)
 
         if score > best_score
           best_score    = score
-          best_response = entry["response"]
+          best_entry    = entry
         end
       end
 
-      best_score >= @threshold ? best_response : nil
+      [best_entry["response"], best_entry["token_info"] || {}] if best_score >= @threshold
     rescue ::Redis::BaseError => e
       warn "[llm_optimizer] SemanticCache lookup failed: #{e.message}"
       nil

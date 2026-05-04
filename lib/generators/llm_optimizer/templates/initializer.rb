@@ -27,6 +27,9 @@ LlmOptimizer.configure do |config|
   config.cache_ttl            = 86_400 # cache entry TTL in seconds (default: 24h)
   config.timeout_seconds      = 5 # timeout for embedding / external API calls
 
+  # --- Tools ---
+  # config.with_tools = [] # Array of tool definitions (OpenAI/Anthropic format)
+
   # --- Logging ---
   config.logger        = Rails.logger
   config.debug_logging = Rails.env.development?
@@ -81,36 +84,39 @@ LlmOptimizer.configure do |config|
   # Messages caller for history manager/conversation summary - Optional
   # config.system_prompt = "You are a helpful person who gives responses in a non harmful way. " \
   #                  "If any serious question is asked, handle it in effectively."
-  # OpenAI implmeentation -
-  # config.messages_caller = ->(messages, model:) {
-  #   response = $openai.chat(
-  #     parameters: {
-  #       model: model,
-  #       messages: messages.map { |m| { role: m[:role], content: m[:content] } }
-  #     }
-  #   )
+  # OpenAI implementation -
+  # config.messages_caller = ->(messages, model:, tools: nil) {
+  #   parameters = {
+  #     model: model,
+  #     messages: messages.map { |m| { role: m[:role], content: m[:content] } }
+  #   }
+  #   parameters[:tools] = tools if tools&.any?
+  #
+  #   response = $openai.chat(parameters: parameters)
   #   response.dig("choices", 0, "message", "content")
   # }
 
   # RubyLLM implementation -
-  # config.messages_caller = ->(messages, model:) {
+  # config.messages_caller = ->(messages, model:, tools: nil) {
   #   chat = RubyLLM.chat(model: model)
+  #   chat.with_tools(*tools) if tools&.any?
   #   messages[0..-2].each { |m| chat.add_message(role: m[:role], content: m[:content]) }
   #   chat.ask(messages.last[:content]).content
   # }
 
   # Anthropic implementation -
-  # config.messages_caller = ->(messages, model:) {
+  # config.messages_caller = ->(messages, model:, tools: nil) {
   #   # Anthropic separates system messages from the messages array
   #   system_msg = messages.find { |m| m[:role] == "system" }&.dig(:content)
   #   chat_msgs  = messages.reject { |m| m[:role] == "system" }
   #                       .map { |m| { role: m[:role], content: m[:content] } }
-
+  #
   #   response = $anthropic.messages(
   #     model: model,
   #     max_tokens: 1024,
   #     system: system_msg,
-  #     messages: chat_msgs
+  #     messages: chat_msgs,
+  #     tools: tools
   #   )
   #   response["content"].first["text"]
   # }
