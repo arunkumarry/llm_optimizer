@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-05-04
+
+### Added
+- `with_tools` configuration option (aliased as `tools`) — allows passing function/tool definitions to LLM calls via the `optimize` method
+- Tool support for both `llm_caller` and `messages_caller` — `tools:` keyword argument is now passed to all underlying LLM callers
+- `with_tools` examples in the README and Rails initializer template
+- `cache_scope` configuration option — isolates semantic cache entries into separate namespaces; useful for ensuring cache hits only occur within specific contexts (e.g., user IDs, account types, or dynamic categories)
+
+### Changed
+- `Pipeline#raw_llm_call` refactored to handle global and per-call tools consistently
+- Refactored `Pipeline` to remove duplicate internal method definitions (`semantic_cache_lookup`, `store_in_cache`)
+- `SemanticCache#lookup` return format updated to `[response, token_info]` to support better metadata tracking
+
+### Fixed
+- RuboCop `Metrics/ParameterLists` offense in `OptimizeResult#initialize` by adding targeted override for the necessary result fields
+
 ## [0.1.5] - 2026-04-22
 
 ### Added
