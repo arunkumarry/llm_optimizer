@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-05-05
+
+### Added
+- `schema` configuration option for structured output support
+
+### Fixed
+- Prevented empty or nil LLM responses from being stored in the semantic cache
+- Fixed `NoMethodError` in the caching pipeline by replacing ActiveSupport-dependent `.blank?` with standard Ruby checks
+- Cleaned up duplicated keys in `LlmOptimizer::Configuration`
+
 ## [0.1.6] - 2026-05-04
 
 ### Added
