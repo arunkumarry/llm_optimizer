@@ -22,13 +22,14 @@ module LlmOptimizer
       llm_caller
       embedding_caller
       classifier_caller
-      conversation_ttl
-      system_prompt
       messages_caller
+      system_prompt
+      conversation_ttl
       cache_scope
       tools
       with_tools
       tools_caller
+      schema
     ].freeze
 
     # Define readers for all known keys (setters below track explicit sets)

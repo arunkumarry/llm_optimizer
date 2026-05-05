@@ -164,6 +164,7 @@ module LlmOptimizer
 
     def store_in_cache(embedding, response, config, token_info = {})
       return unless config.use_semantic_cache && embedding
+      return if response.nil? || response.to_s.strip.empty? # Don't cache empty or nil responses
 
       SemanticCache.new(build_redis(config.redis_url),
                         threshold: config.similarity_threshold,
