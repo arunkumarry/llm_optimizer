@@ -33,8 +33,8 @@ class TestConfiguration < Minitest::Test
     assert_equal 4000, LlmOptimizer::Configuration.new.token_budget
   end
 
-  def test_default_embedding_model
-    assert_equal "text-embedding-3-small", LlmOptimizer::Configuration.new.embedding_model
+  def test_default_embedding_model_is_nil
+    assert_nil LlmOptimizer::Configuration.new.embedding_model
   end
 
   def test_default_simple_model
@@ -42,7 +42,7 @@ class TestConfiguration < Minitest::Test
   end
 
   def test_default_complex_model
-    assert_equal "claude-3-5-sonnet-20241022", LlmOptimizer::Configuration.new.complex_model
+    assert_equal "claude-sonnet-4-5", LlmOptimizer::Configuration.new.complex_model
   end
 
   def test_default_debug_logging_is_false
@@ -170,5 +170,111 @@ class TestConfiguration < Minitest::Test
     LlmOptimizer.configure { |c| c.token_budget = 9999 }
     LlmOptimizer.reset_configuration!
     assert_equal 4000, LlmOptimizer.configuration.token_budget
+  end
+
+  # Grouped settings and flat aliases
+
+  def test_grouped_setting_readable_via_flat_alias
+    config = LlmOptimizer::Configuration.new
+    config.cache.enabled = true
+    assert_equal true, config.use_semantic_cache
+  end
+
+  def test_flat_alias_writes_into_group
+    config = LlmOptimizer::Configuration.new
+    config.route_to = :simple
+    assert_equal :simple, config.routing.mode
+  end
+
+  def test_with_tools_aliases_tools
+    config = LlmOptimizer::Configuration.new
+    config.with_tools = [{ name: "t" }]
+    assert_equal [{ name: "t" }], config.tools
+  end
+
+  def test_merge_copies_group_settings
+    base = LlmOptimizer::Configuration.new
+    other = LlmOptimizer::Configuration.new
+    other.cache.threshold = 0.5
+    base.merge!(other)
+    assert_in_delta 0.5, base.cache.threshold
+  end
+
+  def test_merge_does_not_reset_group_settings
+    base = LlmOptimizer::Configuration.new
+    base.routing.simple_model = "my-model"
+    base.merge!(LlmOptimizer::Configuration.new)
+    assert_equal "my-model", base.routing.simple_model
+  end
+
+  # Adapter resolution
+
+  def test_resolved_adapter_nil_without_adapter_or_callers
+    assert_nil LlmOptimizer::Configuration.new.resolved_adapter
+  end
+
+  def test_resolved_adapter_wraps_legacy_callers
+    config = LlmOptimizer::Configuration.new
+    config.llm_caller = ->(_p, **_k) { "hi" }
+    assert_instance_of LlmOptimizer::Adapters::Legacy, config.resolved_adapter
+  end
+
+  def test_resolved_adapter_resolves_symbols
+    config = LlmOptimizer::Configuration.new
+    config.adapter = :anthropic
+    assert_instance_of LlmOptimizer::Adapters::Anthropic, config.resolved_adapter
+  end
+
+  def test_resolved_adapter_returns_instance_untouched
+    adapter = LlmOptimizer::Adapters::Custom.new(chat: ->(_m, model:) { model })
+    config = LlmOptimizer::Configuration.new
+    config.adapter = adapter
+    assert_same adapter, config.resolved_adapter
+  end
+
+  # Validation
+
+  def test_configure_raises_on_invalid_route_mode
+    assert_raises(LlmOptimizer::ConfigurationError) do
+      LlmOptimizer.configure { |c| c.route_to = :fastest }
+    end
+  end
+
+  def test_configure_raises_on_out_of_range_threshold
+    assert_raises(LlmOptimizer::ConfigurationError) do
+      LlmOptimizer.configure { |c| c.similarity_threshold = 1.5 }
+    end
+  end
+
+  def test_validate_raises_without_adapter
+    err = assert_raises(LlmOptimizer::ConfigurationError) { LlmOptimizer.validate! }
+    assert_includes err.message, "adapter"
+  end
+
+  def test_validate_raises_when_cache_enabled_without_redis_url
+    config = LlmOptimizer::Configuration.new
+    config.llm_caller = ->(_p, **_k) { "hi" }
+    config.embedding_caller = ->(_t) { [1.0] }
+    config.cache.enabled = true
+    err = assert_raises(LlmOptimizer::ConfigurationError) { config.validate! }
+    assert_includes err.message, "redis_url"
+  end
+
+  def test_validate_raises_when_cache_enabled_without_embedding_support
+    config = LlmOptimizer::Configuration.new
+    config.llm_caller = ->(_p, **_k) { "hi" }
+    config.redis_url = "redis://localhost:6379"
+    config.cache.enabled = true
+    err = assert_raises(LlmOptimizer::ConfigurationError) { config.validate! }
+    assert_includes err.message, "embedding"
+  end
+
+  def test_validate_passes_with_complete_cache_config
+    config = LlmOptimizer::Configuration.new
+    config.llm_caller = ->(_p, **_k) { "hi" }
+    config.embedding_caller = ->(_t) { [1.0] }
+    config.redis_url = "redis://localhost:6379"
+    config.cache.enabled = true
+    assert config.validate!
   end
 end

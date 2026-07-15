@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require_relative "llm_optimizer/version"
+require_relative "llm_optimizer/invoker"
+require_relative "llm_optimizer/adapters"
 require_relative "llm_optimizer/configuration"
 require_relative "llm_optimizer/optimize_result"
 require_relative "llm_optimizer/compressor"
@@ -27,17 +29,14 @@ module LlmOptimizer
     temp = Configuration.new
     yield temp
     configuration.merge!(temp)
-    validate_configuration!(configuration)
+    configuration.validate_values!
+    configuration
   end
 
-  def self.validate_configuration!(config)
-    return unless config.use_semantic_cache && config.embedding_caller.nil?
-
-    config.logger.warn(
-      "[llm_optimizer] use_semantic_cache is true but no embedding_caller is configured. " \
-      "Semantic caching will be skipped. Set config.embedding_caller to enable it."
-    )
-    config.use_semantic_cache = false
+  # Full configuration check — call from the end of your initializer to fail
+  # fast at boot with an actionable message instead of at the first LLM call.
+  def self.validate!
+    configuration.validate!
   end
 
   def self.configuration
@@ -90,6 +89,7 @@ module LlmOptimizer
     call_config     = build_call_config(options, &)
     conversation_id = options[:conversation_id]
     validate_conversation_options!(conversation_id, options, call_config)
+    call_config.validate!
 
     original_prompt           = prompt
     original_tokens           = Compressor.new.estimate_tokens(prompt)

@@ -21,10 +21,18 @@ Metrics/BlockLength:
     - "*.gemspec"
     - "test/**/*.rb"
 
-# Test classes are naturally long
+# Test classes are naturally long; Configuration is mostly declarative
+# (grouped settings + flat compatibility aliases)
 Metrics/ClassLength:
   Exclude:
     - "test/**/*.rb"
+    - "lib/llm_optimizer/configuration.rb"
+
+# validate!/validate_values! raise on failure and return true (like AR's save!)
+Naming/PredicateMethod:
+  AllowedMethods:
+    - validate!
+    - validate_values!
 
 # The optimize method is intentionally a pipeline — complexity is expected
 Metrics/MethodLength:
