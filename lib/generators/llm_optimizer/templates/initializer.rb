@@ -6,13 +6,15 @@
 LlmOptimizer.configure do |config|
   # 1. Adapter — how the gem talks to your LLM provider.
   #    Built-in: :ruby_llm (recommended, covers OpenAI/Anthropic/Gemini/Bedrock/
-  #    Ollama via the ruby_llm gem), :open_ai (ruby-openai gem), :anthropic.
+  #    Ollama via the ruby_llm gem), :open_ai (official `openai` gem), :anthropic.
   #    Any other provider: see "Custom adapter" in the appendix below.
   config.adapter = :ruby_llm
 
   # 2. Models — cheap tier for simple prompts, premium tier for complex ones.
-  config.routing.simple_model  = "gpt-4o-mini"
-  config.routing.complex_model = "claude-sonnet-4-5"
+  #    REQUIRED: there are no defaults. Provider model IDs are retired and
+  #    renamed frequently, so pin IDs your account can actually call today.
+  config.routing.simple_model  = "<cheap-model-id>"   # e.g. a small/mini/nano tier
+  config.routing.complex_model = "<premium-model-id>" # e.g. a flagship tier
 
   # 3. Optimizations — all off by default; enable what you need.
   config.cache.enabled       = false # semantic cache (needs redis_url)
@@ -46,16 +48,16 @@ LlmOptimizer.validate!
 # Adapter with options (instead of the symbol shorthand):
 #
 #   config.adapter = LlmOptimizer::Adapters::OpenAI.new(
-#     access_token: Rails.application.credentials.openai_api_key,
+#     api_key: Rails.application.credentials.openai_api_key,
 #     embedding_model: "text-embedding-3-large"
 #   )
 #
 # Routing:
 #
-#   config.routing.mode             = :auto         # :auto | :simple | :complex
-#   config.routing.classifier_model = "gpt-4o-mini" # LLM-classify ambiguous
-#                                                   # prompts (default: word-count
-#                                                   # heuristic, no LLM call)
+#   config.routing.mode             = :auto # :auto | :simple | :complex
+#   config.routing.classifier_model = "<cheap-model-id>" # LLM-classify ambiguous
+#                                           # prompts (default: word-count
+#                                           # heuristic, no LLM call)
 #
 # Semantic cache tuning:
 #

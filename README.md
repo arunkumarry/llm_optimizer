@@ -18,8 +18,9 @@ Each stage is independently enabled via configuration flags. If any stage fails 
 LlmOptimizer.configure do |config|
   config.adapter = :ruby_llm            # how the gem talks to your LLM provider
 
-  config.routing.simple_model  = "gpt-4o-mini"
-  config.routing.complex_model = "claude-sonnet-4-5"
+  # Required — no defaults; pin model IDs your account can call today.
+  config.routing.simple_model  = "<cheap-model-id>"
+  config.routing.complex_model = "<premium-model-id>"
 
   config.cache.enabled = true           # semantic caching
   config.redis_url     = ENV["REDIS_URL"]
@@ -30,7 +31,7 @@ result = LlmOptimizer.optimize("What is Redis?")
 result.response          # => "Redis is an in-memory data store..."
 result.cache_status      # => :hit or :miss
 result.model_tier        # => :simple or :complex
-result.model             # => "gpt-4o-mini"
+result.model             # => the simple-tier model ID you configured
 result.original_tokens   # => 5
 result.latency_ms        # => 12.4
 ```
@@ -44,14 +45,16 @@ An adapter is the single integration point between the gem and your LLM provider
 | Adapter | Gem | Chat | Embeddings |
 |---|---|---|---|
 | `:ruby_llm` | [ruby_llm](https://rubygems.org/gems/ruby_llm) | OpenAI, Anthropic, Gemini, Bedrock, Ollama, … | ✅ |
-| `:open_ai` | [ruby-openai](https://rubygems.org/gems/ruby-openai) | OpenAI | ✅ |
+| `:open_ai` | [openai](https://rubygems.org/gems/openai) (official SDK) | OpenAI | ✅ |
 | `:anthropic` | [anthropic](https://rubygems.org/gems/anthropic) | Anthropic | ❌ (pair with `embedding_caller`) |
+
+> `:open_ai` targets the **official `openai` gem**, not the community `ruby-openai` gem. They share the `OpenAI::Client` constant but differ (`api_key:` vs `access_token:`, `chat.completions.create` vs `chat(parameters:)`). On `ruby-openai`, wrap it in `Adapters::Custom` instead.
 
 The adapter gems are not dependencies of llm_optimizer — add the one you use to your own Gemfile. Symbols use environment-variable API keys; instantiate the class for options:
 
 ```ruby
 config.adapter = LlmOptimizer::Adapters::OpenAI.new(
-  access_token: Rails.application.credentials.openai_api_key,
+  api_key: Rails.application.credentials.openai_api_key,
   embedding_model: "text-embedding-3-large"
 )
 ```
@@ -99,7 +102,7 @@ Routing uses a three-layer decision chain:
 3. **LLM classifier** (optional) — for ambiguous prompts, asks a cheap model; falls back to a word-count heuristic if not configured or if the call fails
 
 ```ruby
-config.routing.classifier_model = "gpt-4o-mini"  # enable the LLM classifier
+config.routing.classifier_model = "<cheap-model-id>"  # enable the LLM classifier
 ```
 
 This hybrid approach fixes the core weakness of pure heuristics:
@@ -133,7 +136,7 @@ Add to your Gemfile (plus the adapter gem you use):
 
 ```ruby
 gem "llm_optimizer"
-gem "ruby_llm"   # or ruby-openai / anthropic
+gem "ruby_llm"   # or: openai (official) / anthropic
 ```
 
 For Rails apps, generate the initializer:
@@ -151,8 +154,8 @@ This creates `config/initializers/llm_optimizer.rb` — a minimal working config
 | `adapter` | Symbol/Object | `nil` | `:ruby_llm`, `:open_ai`, `:anthropic`, or an adapter instance |
 | `redis_url` | String | `nil` | Redis URL (required for cache and conversations) |
 | `routing.mode` | Symbol | `:auto` | `:auto`, `:simple`, or `:complex` |
-| `routing.simple_model` | String | `"gpt-4o-mini"` | Model for simple prompts |
-| `routing.complex_model` | String | `"claude-sonnet-4-5"` | Model for complex prompts |
+| `routing.simple_model` | String | — (**required**) | Model for simple prompts; no default |
+| `routing.complex_model` | String | — (**required**) | Model for complex prompts; no default |
 | `routing.classifier_model` | String | `nil` | When set, ambiguous prompts are LLM-classified |
 | `cache.enabled` | Boolean | `false` | Redis-backed semantic cache |
 | `cache.threshold` | Float | `0.96` | Minimum cosine similarity for a hit |
@@ -241,7 +244,10 @@ Existing initializers keep working — flat config keys and the caller lambdas a
 3. Optionally switch flat keys to their grouped equivalents (`use_semantic_cache` → `cache.enabled`, etc.).
 4. Add `LlmOptimizer.validate!` at the end of the initializer.
 
-Note: enabling the cache without Redis/embedding support now raises a `ConfigurationError` instead of silently disabling the cache.
+Breaking changes to note:
+- `simple_model` / `complex_model` no longer have defaults (0.1.x shipped `gpt-4o-mini` / `claude-3-5-sonnet`). Set them explicitly or the gem raises a `ConfigurationError` naming the missing key.
+- The `:open_ai` adapter targets the official `openai` gem, not `ruby-openai`. If you use `ruby-openai`, keep your lambda via `Adapters::Custom`.
+- Enabling the cache without Redis/embedding support now raises a `ConfigurationError` instead of silently disabling the cache.
 
 ## Development
 

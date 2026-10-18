@@ -37,12 +37,12 @@ class TestConfiguration < Minitest::Test
     assert_nil LlmOptimizer::Configuration.new.embedding_model
   end
 
-  def test_default_simple_model
-    assert_equal "gpt-4o-mini", LlmOptimizer::Configuration.new.simple_model
+  def test_default_simple_model_is_nil
+    assert_nil LlmOptimizer::Configuration.new.simple_model
   end
 
-  def test_default_complex_model
-    assert_equal "claude-sonnet-4-5", LlmOptimizer::Configuration.new.complex_model
+  def test_default_complex_model_is_nil
+    assert_nil LlmOptimizer::Configuration.new.complex_model
   end
 
   def test_default_debug_logging_is_false
@@ -275,6 +275,32 @@ class TestConfiguration < Minitest::Test
     config.embedding_caller = ->(_t) { [1.0] }
     config.redis_url = "redis://localhost:6379"
     config.cache.enabled = true
+    config.routing.simple_model  = "simple-x"
+    config.routing.complex_model = "complex-x"
+    assert config.validate!
+  end
+
+  def test_validate_raises_when_routing_models_missing
+    config = LlmOptimizer::Configuration.new
+    config.llm_caller = ->(_p, **_k) { "hi" }
+    err = assert_raises(LlmOptimizer::ConfigurationError) { config.validate! }
+    assert_includes err.message, "routing.simple_model"
+    assert_includes err.message, "routing.complex_model"
+  end
+
+  def test_validate_simple_mode_requires_only_simple_model
+    config = LlmOptimizer::Configuration.new
+    config.llm_caller = ->(_p, **_k) { "hi" }
+    config.routing.mode = :simple
+    config.routing.simple_model = "simple-x"
+    assert config.validate!
+  end
+
+  def test_validate_complex_mode_requires_only_complex_model
+    config = LlmOptimizer::Configuration.new
+    config.llm_caller = ->(_p, **_k) { "hi" }
+    config.routing.mode = :complex
+    config.routing.complex_model = "complex-x"
     assert config.validate!
   end
 end

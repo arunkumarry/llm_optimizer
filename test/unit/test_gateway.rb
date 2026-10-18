@@ -20,6 +20,8 @@ class TestGateway < Minitest::Test
     LlmOptimizer.reset_configuration!
     LlmOptimizer.configure do |c|
       c.llm_caller      = ->(_prompt, **_kwargs) { { content: LLM_RESPONSE, input_tokens: 10, output_tokens: 20 } }
+      c.simple_model    = "test-simple"
+      c.complex_model   = "test-complex"
       c.logger          = Logger.new(nil) # silence logs in tests
     end
   end

@@ -39,8 +39,8 @@ module LlmOptimizer
       MODES = %i[auto simple complex].freeze
 
       setting :mode, default: :auto
-      setting :simple_model, default: "gpt-4o-mini"
-      setting :complex_model, default: "claude-sonnet-4-5"
+      setting :simple_model  # required (no default); provider model IDs churn too fast to ship one
+      setting :complex_model # required (no default)
       setting :classifier_model # when set, ambiguous prompts are classified by this model
     end
 
@@ -208,11 +208,29 @@ module LlmOptimizer
     def cross_field_errors
       errors = []
       errors.concat(adapter_errors)
+      errors.concat(routing_errors)
       errors.concat(cache_errors)
       errors
     rescue ConfigurationError => e
       errors << e.message
       errors
+    end
+
+    # Model IDs have no defaults — they are retired and renamed too often to
+    # ship a value that stays valid. Require the ones the current mode can emit.
+    def routing_errors
+      required = case routing.mode
+                 when :simple then %i[simple_model]
+                 when :complex then %i[complex_model]
+                 else %i[simple_model complex_model]
+                 end
+
+      required.filter_map do |attr|
+        next if routing.public_send(attr)
+
+        "routing.#{attr} is not set. Set config.routing.#{attr} = \"<your-model-id>\" " \
+          "(there is no default — provider model IDs change too often to ship one)."
+      end
     end
 
     def adapter_errors

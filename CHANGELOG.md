@@ -7,12 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.2.0] - 2026-07-15
+## [0.2.0] - 2026-10-18
 
 Ease-of-use refactor: one adapter interface replaces the four caller lambdas, configuration is grouped and validated, and the Rails initializer shrinks to a minimal working config. 0.1.x initializers keep working via compatibility aliases.
 
 ### Added
-- **Adapter interface** (`config.adapter`) — the single integration point between the gem and your LLM provider. Built-in adapters: `:ruby_llm` (chat + embeddings across OpenAI/Anthropic/Gemini/Bedrock/Ollama), `:open_ai` (ruby-openai, chat + embeddings), `:anthropic` (official anthropic gem, chat only). Adapter gems are lazily required with an actionable error if missing
+- **Adapter interface** (`config.adapter`) — the single integration point between the gem and your LLM provider. Built-in adapters: `:ruby_llm` (chat + embeddings across OpenAI/Anthropic/Gemini/Bedrock/Ollama), `:open_ai` (official `openai` gem, chat + embeddings), `:anthropic` (official anthropic gem, chat only). Adapter gems are lazily required with an actionable error if missing
 - `LlmOptimizer::Adapters::Custom` — wrap any provider with `chat:` / `embed:` lambdas
 - **Grouped configuration** — `config.routing.*`, `config.cache.*`, `config.compression.*`, `config.history.*`, `config.conversation.*`; flat 0.1.x keys remain as aliases
 - `config.routing.classifier_model` — enables the LLM routing classifier through the adapter (replaces hand-written `classifier_caller` lambdas)
@@ -22,7 +22,8 @@ Ease-of-use refactor: one adapter interface replaces the four caller lambdas, co
 
 ### Changed
 - **Rails initializer template rewritten** — ~25-line minimal working config with advanced options in a commented appendix, instead of 120 lines of mixed provider examples
-- Default complex model updated from `claude-3-5-sonnet-20241022` to `claude-sonnet-4-5`
+- **`routing.simple_model` / `routing.complex_model` no longer have defaults** — they are now required, and the gem raises a `ConfigurationError` naming the missing key if a routing tier is used without its model set. Provider model IDs (e.g. `gpt-4o-mini`, scheduled for shutdown) are retired and renamed too often to ship a value that stays valid; pin IDs your account can call today
+- **`:open_ai` adapter now targets the official `openai` gem** (`api_key:`, `chat.completions.create`, typed responses) instead of the community `ruby-openai` gem — the two share the `OpenAI::Client` constant but have incompatible APIs. On `ruby-openai`, use `Adapters::Custom`
 - `embedding_model` default is now `nil` (the adapter picks its own default) and lives at `cache.embedding_model`
 - `llm_caller`, `messages_caller`, `embedding_caller`, `classifier_caller` are deprecated; when set they are wrapped in an internal legacy adapter automatically
 - Enabling the semantic cache without `redis_url` or embedding support now raises `ConfigurationError` instead of silently disabling the cache (`validate_configuration!` removed)
