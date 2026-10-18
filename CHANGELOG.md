@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-18
+
+Ease-of-use refactor: one adapter interface replaces the four caller lambdas, configuration is grouped and validated, and the Rails initializer shrinks to a minimal working config. 0.1.x initializers keep working via compatibility aliases.
+
+### Added
+- **Adapter interface** (`config.adapter`) — the single integration point between the gem and your LLM provider. Built-in adapters: `:ruby_llm` (chat + embeddings across OpenAI/Anthropic/Gemini/Bedrock/Ollama), `:open_ai` (official `openai` gem, chat + embeddings), `:anthropic` (official anthropic gem, chat only). Adapter gems are lazily required with an actionable error if missing
+- `LlmOptimizer::Adapters::Custom` — wrap any provider with `chat:` / `embed:` lambdas
+- **Grouped configuration** — `config.routing.*`, `config.cache.*`, `config.compression.*`, `config.history.*`, `config.conversation.*`; flat 0.1.x keys remain as aliases
+- `config.routing.classifier_model` — enables the LLM routing classifier through the adapter (replaces hand-written `classifier_caller` lambdas)
+- **Fail-fast validation** — `LlmOptimizer.configure` validates values immediately; each `optimize` call validates cross-field consistency; `LlmOptimizer.validate!` runs the full check at boot with actionable error messages
+- **Defensive lambda invocation** (`LlmOptimizer::Invoker`) — user-supplied lambdas only receive the keyword arguments their signature accepts, so lambdas written against older signatures keep working
+- `schema` config option is now actually passed through to adapters (it was declared but unused in 0.1.7)
+
+### Changed
+- **Rails initializer template rewritten** — ~25-line minimal working config with advanced options in a commented appendix, instead of 120 lines of mixed provider examples
+- **`routing.simple_model` / `routing.complex_model` no longer have defaults** — they are now required, and the gem raises a `ConfigurationError` naming the missing key if a routing tier is used without its model set. Provider model IDs (e.g. `gpt-4o-mini`, scheduled for shutdown) are retired and renamed too often to ship a value that stays valid; pin IDs your account can call today
+- **`:open_ai` adapter now targets the official `openai` gem** (`api_key:`, `chat.completions.create`, typed responses) instead of the community `ruby-openai` gem — the two share the `OpenAI::Client` constant but have incompatible APIs. On `ruby-openai`, use `Adapters::Custom`
+- `embedding_model` default is now `nil` (the adapter picks its own default) and lives at `cache.embedding_model`
+- `llm_caller`, `messages_caller`, `embedding_caller`, `classifier_caller` are deprecated; when set they are wrapped in an internal legacy adapter automatically
+- Enabling the semantic cache without `redis_url` or embedding support now raises `ConfigurationError` instead of silently disabling the cache (`validate_configuration!` removed)
+- Semantic cache lookup no longer connects to a default localhost Redis when `redis_url` is unset — it logs a warning and skips the cache
+
+### Fixed
+- `llm_caller` lambdas written as `->(prompt, model:)` (the documented signature) crashed with `unknown keyword: :tools` since 0.1.6 — the gem passed `tools:` unconditionally; lambdas now only receive keywords they accept
+- History summarization injected a `[content, token_info]` array as the summary message content instead of the summary string
+- `tools` and `with_tools` are now true aliases of one value instead of two separate config keys
+- Removed dead code: unused `tools_caller` config key and the never-assigned `@_current_llm_caller`
+
 ## [0.1.7] - 2026-05-05
 
 ### Added
@@ -127,7 +155,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `OptimizeResult` struct with `response`, `model`, `model_tier`, `cache_status`, `original_tokens`, `compressed_tokens`, `latency_ms`, `messages`
 - Unit test suite covering all components with positive and negative scenarios using Minitest + Mocha
 
-[Unreleased]: https://github.com/arunkumarry/llm_optimizer/compare/v0.1.5...HEAD
+[Unreleased]: https://github.com/arunkumarry/llm_optimizer/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/arunkumarry/llm_optimizer/compare/v0.1.7...v0.2.0
+[0.1.7]: https://github.com/arunkumarry/llm_optimizer/compare/v0.1.6...v0.1.7
+[0.1.6]: https://github.com/arunkumarry/llm_optimizer/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/arunkumarry/llm_optimizer/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/arunkumarry/llm_optimizer/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/arunkumarry/llm_optimizer/compare/v0.1.2...v0.1.3

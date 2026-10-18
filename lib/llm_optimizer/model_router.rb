@@ -26,7 +26,8 @@ module LlmOptimizer
 
     def route(prompt)
       # Explicit override — always
-      return @config.route_to if %i[simple complex].include?(@config.route_to)
+      mode = @config.routing.mode
+      return mode if %i[simple complex].include?(mode)
 
       # Unambiguous fast-path signals (no LLM call needed)
       return :complex if CODE_BLOCK_RE.match?(prompt)
@@ -36,7 +37,7 @@ module LlmOptimizer
       return :complex if COMPLEX_PHRASES.any?  { |ph| lower.include?(ph) }
 
       # LLM classifier for ambiguous prompts
-      if @config.classifier_caller
+      if classifier_configured?
         result = classify_with_llm(prompt)
         return result if result
       end
@@ -47,10 +48,13 @@ module LlmOptimizer
 
     private
 
+    def classifier_configured?
+      !@config.classifier_caller.nil? || !@config.routing.classifier_model.nil?
+    end
+
     def classify_with_llm(prompt)
       classifier_prompt = format(CLASSIFIER_PROMPT, prompt: prompt)
-      response = @config.classifier_caller.call(classifier_prompt)
-      normalized = response.to_s.strip.downcase
+      normalized = classifier_response(classifier_prompt).to_s.strip.downcase
 
       # Check for word boundary match to handle responses like
       # "simple." / "**simple**" / "the answer is simple"
@@ -60,6 +64,16 @@ module LlmOptimizer
       nil # unrecognized response — fall through to heuristic
     rescue StandardError
       nil # classifier failure — fall through to heuristic
+    end
+
+    def classifier_response(classifier_prompt)
+      return @config.classifier_caller.call(classifier_prompt) if @config.classifier_caller
+
+      result = @config.resolved_adapter&.chat(
+        [{ role: "user", content: classifier_prompt }],
+        model: @config.routing.classifier_model
+      )
+      result.is_a?(Hash) ? result[:content] : result
     end
   end
 end

@@ -59,7 +59,7 @@ module LlmOptimizer
     def apply_history_manager(messages, config)
       return messages unless config.manage_history && messages
 
-      llm_caller  = ->(p, model:) { raw_llm_call(p, model: model, config: config) }
+      llm_caller  = ->(p, model:) { raw_llm_call(p, model: model, config: config).first }
       history_mgr = HistoryManager.new(
         llm_caller: llm_caller,
         simple_model: config.simple_model,
@@ -96,21 +96,27 @@ module LlmOptimizer
     end
 
     def raw_llm_call(prompt, model:, messages: nil, config: nil)
-      tools = config&.with_tools || config&.tools
-      result = if messages && !messages.empty? && config&.messages_caller
-                 config.messages_caller.call(messages + [{ role: "user", content: prompt }], model: model, tools: tools)
-               else
-                 llm = config&.llm_caller || @_current_llm_caller
-                 raise ConfigurationError, "No llm_caller configured." unless llm
+      adapter = config&.resolved_adapter
+      unless adapter
+        raise ConfigurationError,
+              "No adapter configured. Set config.adapter = :ruby_llm (or :open_ai, :anthropic), " \
+              "or pass your own via LlmOptimizer::Adapters::Custom."
+      end
 
-                 llm.call(prompt, model: model, tools: tools)
-               end
+      full_messages = Array(messages) + [{ role: "user", content: prompt }]
+      result        = adapter.chat(full_messages, model: model, tools: config.tools, schema: config.schema)
 
       if result.is_a?(Hash)
         [result[:content], result]
       else
         [result, {}]
       end
+    end
+
+    def compute_embedding(prompt, config)
+      return config.embedding_caller.call(prompt) if config.embedding_caller
+
+      config.resolved_adapter.embed(prompt)
     end
 
     def elapsed_ms(start)
@@ -138,7 +144,12 @@ module LlmOptimizer
                               compressed_tokens, original_prompt, start, config)
       return [nil, nil] unless config.use_semantic_cache
 
-      embedding = config.embedding_caller.call(prompt)
+      unless config.redis_url
+        config.logger.warn("[llm_optimizer] semantic cache enabled but redis_url is not set — skipping cache")
+        return [nil, nil]
+      end
+
+      embedding = compute_embedding(prompt, config)
       cache     = SemanticCache.new(build_redis(config.redis_url),
                                     threshold: config.similarity_threshold,
                                     ttl: config.cache_ttl,

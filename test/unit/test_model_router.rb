@@ -161,4 +161,33 @@ class TestModelRouter < Minitest::Test
     r = LlmOptimizer::ModelRouter.new(cfg)
     assert_equal :complex, r.route("Fix this bug")
   end
+
+  def test_classifier_model_routes_through_adapter
+    used_model = nil
+    cfg = LlmOptimizer::Configuration.new
+    cfg.adapter = LlmOptimizer::Adapters::Custom.new(
+      chat: lambda { |_messages, model:|
+        used_model = model
+        "complex"
+      }
+    )
+    cfg.routing.classifier_model = "cheap-model"
+    r = LlmOptimizer::ModelRouter.new(cfg)
+    assert_equal :complex, r.route("Fix this bug")
+    assert_equal "cheap-model", used_model
+  end
+
+  def test_no_classifier_model_skips_adapter_and_uses_heuristic
+    called = false
+    cfg = LlmOptimizer::Configuration.new
+    cfg.adapter = LlmOptimizer::Adapters::Custom.new(
+      chat: lambda { |_messages, model:|
+        called = true
+        model
+      }
+    )
+    r = LlmOptimizer::ModelRouter.new(cfg)
+    assert_equal :simple, r.route("What time is it?")
+    refute called, "adapter should not be called without routing.classifier_model"
+  end
 end
